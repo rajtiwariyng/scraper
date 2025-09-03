@@ -6,75 +6,48 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 
-class Laptop extends Model
+class Product extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'platform',
         'sku',
-        'product_name',
+        'title',
         'description',
+        'currency_code',
         'price',
         'sale_price',
         'offers',
+        'category',
         'inventory_status',
         'rating',
         'review_count',
-        'variants',
         'brand',
         'model_name',
-        'screen_size',
         'color',
-        'hard_disk',
-        'cpu_model',
-        'ram',
-        'operating_system',
-        'special_features',
-        'graphics_card',
         'image_urls',
         'video_urls',
         'product_url',
         'is_active',
-        'last_scraped_at',
+        'scraped_date',
         // New detailed specifications
         'manufacturer',
-        'series',
-        'form_factor',
-        'screen_resolution',
-        'package_dimensions',
-        'item_model_number',
-        'processor_brand',
-        'processor_type',
-        'processor_speed',
-        'processor_count',
-        'memory_technology',
-        'computer_memory_type',
-        'maximum_memory_supported',
-        'hard_disk_description',
-        'hard_disk_interface',
-        'graphics_coprocessor',
-        'graphics_chipset_brand',
-        'number_of_usb_ports',
-        'connectivity_type',
-        'wireless_type',
-        'bluetooth_version',
-        'battery_life',
         'weight',
         'dimensions',
         // Detailed offers
         'detailed_offers',
         'cashback_offers',
         'emi_offers',
+        'is_prime',
+        'is_sponsored',
         'bank_offers',
         'partner_offers',
         // Additional product information
-        'key_features',
         'technical_details',
-        'availability_status',
-        'mrp_price',
-        'discount_percentage',
+        'additional_information',
         'seller_name',
+        'product_badge',
         'amazon_choice',
         'bestseller'
     ];
@@ -82,20 +55,18 @@ class Laptop extends Model
     protected $casts = [
         'price' => 'decimal:2',
         'sale_price' => 'decimal:2',
-        'mrp_price' => 'decimal:2',
         'rating' => 'decimal:2',
         'review_count' => 'integer',
         'processor_count' => 'integer',
-        'discount_percentage' => 'integer',
-        'variants' => 'array',
         'image_urls' => 'array',
         'video_urls' => 'array',
         'detailed_offers' => 'array',
         'technical_details' => 'array',
+        'additional_information' => 'array',
         'is_active' => 'boolean',
         'amazon_choice' => 'boolean',
         'bestseller' => 'boolean',
-        'last_scraped_at' => 'datetime'
+        'scraped_date' => 'datetime'
     ];
 
     /**
@@ -123,13 +94,13 @@ class Laptop extends Model
     }
 
     /**
-     * Find laptop by platform and SKU
+     * Find Product by platform and SKU
      */
     public static function findByPlatformAndSku(string $platform, string $sku): ?self
     {
         return self::where('platform', $platform)
-                   ->where('sku', $sku)
-                   ->first();
+            ->where('sku', $sku)
+            ->first();
     }
 
     /**
@@ -166,11 +137,19 @@ class Laptop extends Model
     public function hasDataChanged(array $newData): bool
     {
         $fieldsToCheck = [
-            'product_name', 'description', 'price', 'sale_price', 'offers',
-            'inventory_status', 'rating', 'review_count', 'variants',
-            'brand', 'model_name', 'screen_size', 'color', 'hard_disk',
-            'cpu_model', 'ram', 'operating_system', 'special_features',
-            'graphics_card', 'image_urls', 'video_urls'
+            'title',
+            'description',
+            'price',
+            'sale_price',
+            'offers',
+            'inventory_status',
+            'rating',
+            'review_count',
+            'brand',
+            'model_name',
+            'color',
+            'image_urls',
+            'video_urls'
         ];
 
         foreach ($fieldsToCheck as $field) {
@@ -179,7 +158,7 @@ class Laptop extends Model
                 $newValue = $newData[$field];
 
                 // Handle JSON fields
-                if (in_array($field, ['variants', 'image_urls', 'video_urls'])) {
+                if (in_array($field, ['image_urls', 'video_urls'])) {
                     $currentValue = is_array($currentValue) ? $currentValue : json_decode($currentValue, true);
                     $newValue = is_array($newValue) ? $newValue : json_decode($newValue, true);
                 }
@@ -199,14 +178,13 @@ class Laptop extends Model
     public function updateIfChanged(array $newData): bool
     {
         if ($this->hasDataChanged($newData)) {
-            $newData['last_scraped_at'] = now();
+            $newData['scraped_date'] = now();
             $this->update($newData);
             return true;
         }
 
-        // Update only the last_scraped_at timestamp
-        $this->update(['last_scraped_at' => now()]);
+        // Update only the scraped_date timestamp
+        $this->update(['scraped_date' => now()]);
         return false;
     }
 }
-

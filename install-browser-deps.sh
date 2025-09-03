@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Installing Browser Dependencies for Laptop Scraper"
+echo "Installing Browser Dependencies for Product Scraper"
 echo "=================================================="
 
 # Check if Node.js is installed

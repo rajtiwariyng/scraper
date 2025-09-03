@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Laptop Scraper - Cron Setup Script
+# Product Scraper - Cron Setup Script
 # This script sets up the cron job for Laravel scheduler
 
 # Colors for output
@@ -9,7 +9,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Laptop Scraper - Cron Setup${NC}"
+echo -e "${GREEN}Product Scraper - Cron Setup${NC}"
 echo "=================================="
 
 # Get the current directory (project root)

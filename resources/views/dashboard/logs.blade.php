@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Scraping Logs - Laptop Data Scraper')
+@section('title', 'Scraping Logs - Product Data Scraper')
 
 @section('content')
 <div class="row mb-4">
@@ -31,9 +31,9 @@
                     <select name="platform" class="form-select">
                         <option value="">All Platforms</option>
                         @foreach($platforms as $platform)
-                            <option value="{{ $platform }}" {{ ($filters['platform'] ?? '') === $platform ? 'selected' : '' }}>
-                                {{ ucfirst($platform) }}
-                            </option>
+                        <option value="{{ $platform }}" {{ ($filters['platform'] ?? '') === $platform ? 'selected' : '' }}>
+                            {{ ucfirst($platform) }}
+                        </option>
                         @endforeach
                     </select>
                 </div>
@@ -112,35 +112,35 @@
                             </td>
                             <td>
                                 @switch($log->status)
-                                    @case('completed')
-                                        <span class="badge bg-success badge-status">
-                                            <i class="fas fa-check me-1"></i>Completed
-                                        </span>
-                                        @break
-                                    @case('failed')
-                                        <span class="badge bg-danger badge-status">
-                                            <i class="fas fa-times me-1"></i>Failed
-                                        </span>
-                                        @break
-                                    @case('started')
-                                        <span class="badge bg-info badge-status">
-                                            <i class="fas fa-play me-1"></i>Started
-                                        </span>
-                                        @break
-                                    @case('partial')
-                                        <span class="badge bg-warning badge-status">
-                                            <i class="fas fa-exclamation me-1"></i>Partial
-                                        </span>
-                                        @break
-                                    @default
-                                        <span class="badge bg-secondary badge-status">{{ ucfirst($log->status) }}</span>
+                                @case('completed')
+                                <span class="badge bg-success badge-status">
+                                    <i class="fas fa-check me-1"></i>Completed
+                                </span>
+                                @break
+                                @case('failed')
+                                <span class="badge bg-danger badge-status">
+                                    <i class="fas fa-times me-1"></i>Failed
+                                </span>
+                                @break
+                                @case('started')
+                                <span class="badge bg-info badge-status">
+                                    <i class="fas fa-play me-1"></i>Started
+                                </span>
+                                @break
+                                @case('partial')
+                                <span class="badge bg-warning badge-status">
+                                    <i class="fas fa-exclamation me-1"></i>Partial
+                                </span>
+                                @break
+                                @default
+                                <span class="badge bg-secondary badge-status">{{ ucfirst($log->status) }}</span>
                                 @endswitch
                             </td>
                             <td>
                                 @if($log->duration_seconds)
-                                    {{ gmdate('H:i:s', $log->duration_seconds) }}
+                                {{ gmdate('H:i:s', $log->duration_seconds) }}
                                 @else
-                                    <span class="text-muted">N/A</span>
+                                <span class="text-muted">N/A</span>
                                 @endif
                             </td>
                             <td>
@@ -153,45 +153,45 @@
                             <td>
                                 <div class="small">
                                     @if($log->products_added > 0)
-                                        <div class="text-success">
-                                            <i class="fas fa-plus me-1"></i>{{ $log->products_added }} added
-                                        </div>
+                                    <div class="text-success">
+                                        <i class="fas fa-plus me-1"></i>{{ $log->products_added }} added
+                                    </div>
                                     @endif
                                     @if($log->products_updated > 0)
-                                        <div class="text-info">
-                                            <i class="fas fa-edit me-1"></i>{{ $log->products_updated }} updated
-                                        </div>
+                                    <div class="text-info">
+                                        <i class="fas fa-edit me-1"></i>{{ $log->products_updated }} updated
+                                    </div>
                                     @endif
                                     @if($log->products_deactivated > 0)
-                                        <div class="text-warning">
-                                            <i class="fas fa-minus me-1"></i>{{ $log->products_deactivated }} deactivated
-                                        </div>
+                                    <div class="text-warning">
+                                        <i class="fas fa-minus me-1"></i>{{ $log->products_deactivated }} deactivated
+                                    </div>
                                     @endif
                                     @if($log->products_added == 0 && $log->products_updated == 0 && $log->products_deactivated == 0)
-                                        <span class="text-muted">No changes</span>
+                                    <span class="text-muted">No changes</span>
                                     @endif
                                 </div>
                             </td>
                             <td>
                                 @if($log->errors_count > 0)
-                                    <span class="badge bg-danger">{{ $log->errors_count }}</span>
+                                <span class="badge bg-danger">{{ $log->errors_count }}</span>
                                 @else
-                                    <span class="text-success">
-                                        <i class="fas fa-check"></i>
-                                    </span>
+                                <span class="text-success">
+                                    <i class="fas fa-check"></i>
+                                </span>
                                 @endif
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-info" onclick="showLogDetails({{ $log->id }})" 
-                                            title="View Details">
+                                    <button class="btn btn-outline-info" onclick="showLogDetails({{ $log->id }})"
+                                        title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                     @if($log->errors_count > 0)
-                                        <button class="btn btn-outline-danger" onclick="showLogErrors({{ $log->id }})" 
-                                                title="View Errors">
-                                            <i class="fas fa-exclamation-triangle"></i>
-                                        </button>
+                                    <button class="btn btn-outline-danger" onclick="showLogErrors({{ $log->id }})"
+                                        title="View Errors">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </button>
                                     @endif
                                 </div>
                             </td>
@@ -212,9 +212,9 @@
 
             <!-- Pagination -->
             @if($logs->hasPages())
-                <div class="d-flex justify-content-center mt-4">
-                    {{ $logs->appends(request()->query())->links() }}
-                </div>
+            <div class="d-flex justify-content-center mt-4">
+                {{ $logs->appends(request()->query())->links() }}
+            </div>
             @endif
         </div>
     </div>
@@ -272,7 +272,7 @@
             </div>
         `;
         modal.show();
-        
+
         // Simulate loading log details
         setTimeout(() => {
             document.getElementById('logModalBody').innerHTML = `
@@ -317,7 +317,7 @@
             </div>
         `;
         modal.show();
-        
+
         // Simulate loading error details
         setTimeout(() => {
             document.getElementById('errorModalBody').innerHTML = `
@@ -361,4 +361,3 @@
     }
 </script>
 @endpush
-

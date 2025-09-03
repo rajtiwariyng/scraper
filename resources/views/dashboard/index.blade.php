@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Dashboard - Laptop Data Scraper')
+@section('title', 'Dashboard - Product Data Scraper')
 
 @section('content')
 <div class="row mb-4">
@@ -77,7 +77,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="stat-card">
             <div class="d-flex align-items-center">
@@ -92,7 +92,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="stat-card">
             <div class="d-flex align-items-center">
@@ -109,7 +109,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="stat-card">
             <div class="d-flex align-items-center">
@@ -162,7 +162,7 @@
                                             @if($data['success_rate'] >= 80) bg-success
                                             @elseif($data['success_rate'] >= 60) bg-warning
                                             @else bg-danger
-                                            @endif" 
+                                            @endif"
                                             style="width: {{ $data['success_rate'] }}%"></div>
                                     </div>
                                     <span class="small">{{ $data['success_rate'] }}%</span>
@@ -172,27 +172,27 @@
                             <td>{{ number_format($data['total_products']) }}</td>
                             <td>
                                 @if($data['avg_duration'])
-                                    {{ gmdate('H:i:s', $data['avg_duration']) }}
+                                {{ gmdate('H:i:s', $data['avg_duration']) }}
                                 @else
-                                    N/A
+                                N/A
                                 @endif
                             </td>
                             <td>
                                 @if($data['last_run'])
-                                    <span title="{{ $data['last_run']->format('Y-m-d H:i:s') }}">
-                                        {{ $data['last_run']->diffForHumans() }}
-                                    </span>
+                                <span title="{{ $data['last_run']->format('Y-m-d H:i:s') }}">
+                                    {{ $data['last_run']->diffForHumans() }}
+                                </span>
                                 @else
-                                    <span class="text-muted">Never</span>
+                                <span class="text-muted">Never</span>
                                 @endif
                             </td>
                             <td>
                                 @if($data['success_rate'] >= 80)
-                                    <span class="badge bg-success badge-status">Healthy</span>
+                                <span class="badge bg-success badge-status">Healthy</span>
                                 @elseif($data['success_rate'] >= 60)
-                                    <span class="badge bg-warning badge-status">Warning</span>
+                                <span class="badge bg-warning badge-status">Warning</span>
                                 @else
-                                    <span class="badge bg-danger badge-status">Error</span>
+                                <span class="badge bg-danger badge-status">Error</span>
                                 @endif
                             </td>
                         </tr>
@@ -295,25 +295,30 @@
     const activityChart = new Chart(activityCtx, {
         type: 'line',
         data: {
-            labels: @json(array_keys($chartData['dailyActivity']->toArray())),
+            labels: @json(array_keys($chartData['dailyActivity'] ->toArray())),
             datasets: [{
                 label: 'Successful Scrapes',
-                data: @json(array_values($chartData['dailyActivity']->map(function($items) {
-                    return $items->where('status', 'completed')->sum('count');
-                })->toArray())),
+                data: @json(array_values(
+                    $chartData['dailyActivity'] ->map(function($items) {
+                        return $items ->where('status', 'completed') ->sum('count');
+                    })->toArray()
+                )),
                 borderColor: chartColors.success,
                 backgroundColor: chartColors.success + '20',
                 tension: 0.4
             }, {
                 label: 'Failed Scrapes',
-                data: @json(array_values($chartData['dailyActivity']->map(function($items) {
-                    return $items->where('status', 'failed')->sum('count');
-                })->toArray())),
+                data: @json(array_values(
+                    $chartData['dailyActivity'] ->map(function($items) {
+                        return $items ->where('status', 'failed') ->sum('count');
+                    })->toArray()
+                )),
                 borderColor: chartColors.danger,
                 backgroundColor: chartColors.danger + '20',
                 tension: 0.4
             }]
         },
+
         options: {
             responsive: false,
             maintainAspectRatio: false,
@@ -330,9 +335,9 @@
     const platformChart = new Chart(platformCtx, {
         type: 'doughnut',
         data: {
-            labels: @json($chartData['platformDistribution']->pluck('platform')->toArray()),
+            labels: @json($chartData['platformDistribution'] ->pluck('platform') ->toArray()),
             datasets: [{
-                data: @json($chartData['platformDistribution']->pluck('count')->toArray()),
+                data: @json($chartData['platformDistribution'] ->pluck('count') ->toArray()),
                 backgroundColor: [
                     chartColors.primary,
                     chartColors.success,
@@ -399,4 +404,3 @@
     }
 </script>
 @endpush
-

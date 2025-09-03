@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Products - Laptop Data Scraper')
+@section('title', 'Products - Product Data Scraper')
 
 @section('content')
 <div class="row mb-4">
@@ -31,9 +31,9 @@
                     <select name="platform" class="form-select">
                         <option value="">All Platforms</option>
                         @foreach($platforms as $platform)
-                            <option value="{{ $platform }}" {{ (isset($filters['platform']) && $filters['platform'] === $platform) ? 'selected' : '' }}>
-                                {{ ucfirst($platform) }}
-                            </option>
+                        <option value="{{ $platform }}" {{ (isset($filters['platform']) && $filters['platform'] === $platform) ? 'selected' : '' }}>
+                            {{ ucfirst($platform) }}
+                        </option>
                         @endforeach
                     </select>
                 </div>
@@ -42,9 +42,9 @@
                     <select name="brand" class="form-select">
                         <option value="">All Brands</option>
                         @foreach($brands as $brand)
-                            <option value="{{ $brand }}" {{ (isset($filters['brand']) && $filters['brand'] === $brand) ? 'selected' : '' }}>
-                                {{ $brand }}
-                            </option>
+                        <option value="{{ $brand }}" {{ (isset($filters['brand']) && $filters['brand'] === $brand) ? 'selected' : '' }}>
+                            {{ $brand }}
+                        </option>
                         @endforeach
                     </select>
                 </div>
@@ -59,8 +59,8 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Search</label>
-                    <input type="text" name="search" class="form-control" placeholder="Product name, SKU..." 
-                           value="{{ $filters['search'] ?? '' }}">
+                    <input type="text" name="search" class="form-control" placeholder="Product name, SKU..."
+                        value="{{ $filters['search'] ?? '' }}">
                 </div>
                 <div class="col-md-1">
                     <label class="form-label">&nbsp;</label>
@@ -85,7 +85,7 @@
                 <div class="d-flex gap-2">
                     <select class="form-select form-select-sm" style="width: auto;" onchange="changeSorting(this.value)">
                         <option value="updated_at-desc" {{ (($filters['sort'] ?? '') === 'updated_at') && (($filters['order'] ?? '') === 'desc') ? 'selected' : '' }}>
-                         Latest Updated
+                            Latest Updated
                         </option>
                         <option value="created_at-desc" {{ (($filters['sort'] ?? '') === 'created_at') && (($filters['order'] ?? '') === 'desc') ? 'selected' : '' }}>
                             Recently Added
@@ -124,12 +124,12 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     @if($product->image_urls && count($product->image_urls) > 0)
-                                        <img src="{{ $product->image_urls[0] }}" alt="Product" 
-                                             class="rounded me-3" style="width: 50px; height: 50px; object-fit: cover;"
-                                             onerror="this.style.display='none'">
+                                    <img src="{{ $product->image_urls[0] }}" alt="Product"
+                                        class="rounded me-3" style="width: 50px; height: 50px; object-fit: cover;"
+                                        onerror="this.style.display='none'">
                                     @endif
                                     <div>
-                                        <h6 class="mb-1">{{ Str::limit($product->product_name, 50) }}</h6>
+                                        <h6 class="mb-1">{{ Str::limit($product->title, 50) }}</h6>
                                         <small class="text-muted">SKU: {{ $product->sku }}</small>
                                     </div>
                                 </div>
@@ -149,36 +149,36 @@
                                             ₹{{ number_format($product->price) }}
                                         </small>
                                     </div>
-                                @else
+                                    @else
                                     <strong>₹{{ number_format($product->price ?? 0) }}</strong>
-                                @endif
+                                    @endif
                             </td>
                             <td>
                                 @if($product->rating)
-                                    <div class="d-flex align-items-center">
-                                        <span class="me-1">{{ number_format($product->rating, 1) }}</span>
-                                        <div class="text-warning">
-                                            @for($i = 1; $i <= 5; $i++)
-                                                @if($i <= $product->rating)
-                                                    <i class="fas fa-star"></i>
-                                                @else
-                                                    <i class="far fa-star"></i>
-                                                @endif
+                                <div class="d-flex align-items-center">
+                                    <span class="me-1">{{ number_format($product->rating, 1) }}</span>
+                                    <div class="text-warning">
+                                        @for($i = 1; $i <= 5; $i++)
+                                            @if($i <=$product->rating)
+                                            <i class="fas fa-star"></i>
+                                            @else
+                                            <i class="far fa-star"></i>
+                                            @endif
                                             @endfor
-                                        </div>
                                     </div>
-                                    @if($product->review_count > 0)
-                                        <small class="text-muted">({{ number_format($product->review_count) }})</small>
-                                    @endif
+                                </div>
+                                @if($product->review_count > 0)
+                                <small class="text-muted">({{ number_format($product->review_count) }})</small>
+                                @endif
                                 @else
-                                    <span class="text-muted">No rating</span>
+                                <span class="text-muted">No rating</span>
                                 @endif
                             </td>
                             <td>
                                 @if($product->is_active)
-                                    <span class="badge bg-success badge-status">Active</span>
+                                <span class="badge bg-success badge-status">Active</span>
                                 @else
-                                    <span class="badge bg-secondary badge-status">Inactive</span>
+                                <span class="badge bg-secondary badge-status">Inactive</span>
                                 @endif
                             </td>
                             <td>
@@ -189,13 +189,13 @@
                             <td>
                                 <div class="btn-group btn-group-sm">
                                     @if($product->product_url)
-                                        <a href="{{ $product->product_url }}" target="_blank" 
-                                           class="btn btn-outline-primary" title="View Original">
-                                            <i class="fas fa-external-link-alt"></i>
-                                        </a>
+                                    <a href="{{ $product->product_url }}" target="_blank"
+                                        class="btn btn-outline-primary" title="View Original">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </a>
                                     @endif
-                                    <button class="btn btn-outline-info" onclick="showProductDetails({{ $product->id }})" 
-                                            title="View Details">
+                                    <button class="btn btn-outline-info" onclick="showProductDetails({{ $product->id }})"
+                                        title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                 </div>
@@ -217,9 +217,9 @@
 
             <!-- Pagination -->
             @if($products->hasPages())
-                <div class="d-flex justify-content-center mt-4">
-                    {{ $products->appends(request()->query())->links() }}
-                </div>
+            <div class="d-flex justify-content-center mt-4">
+                {{ $products->appends(request()->query())->links() }}
+            </div>
             @endif
         </div>
     </div>
@@ -262,7 +262,7 @@
             </div>
         `;
         modal.show();
-        
+
         // Simulate loading product details
         setTimeout(() => {
             document.getElementById('productModalBody').innerHTML = `
@@ -278,4 +278,3 @@
     }
 </script>
 @endpush
-

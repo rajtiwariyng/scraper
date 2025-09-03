@@ -7,16 +7,16 @@ use Illuminate\Support\Facades\Log;
 class DataSanitizer
 {
     /**
-     * Sanitize and validate laptop data
+     * Sanitize and validate product data
      */
-    public static function sanitizeLaptopData(array $data): array
+    public static function sanitizeProductData(array $data): array
     {
         $sanitized = [];
 
         // Required fields
         $sanitized['platform'] = self::sanitizeString($data['platform'] ?? '');
         $sanitized['sku'] = self::sanitizeString($data['sku'] ?? '');
-        $sanitized['product_name'] = self::sanitizeString($data['product_name'] ?? '');
+        $sanitized['title'] = self::sanitizeString($data['title'] ?? '');
 
         // Optional text fields
         $sanitized['description'] = self::sanitizeText($data['description'] ?? null);
@@ -24,15 +24,12 @@ class DataSanitizer
         $sanitized['inventory_status'] = self::sanitizeString($data['inventory_status'] ?? null);
         $sanitized['brand'] = self::sanitizeString($data['brand'] ?? null);
         $sanitized['model_name'] = self::sanitizeString($data['model_name'] ?? null);
-        $sanitized['screen_size'] = self::sanitizeString($data['screen_size'] ?? null);
         $sanitized['color'] = self::sanitizeString($data['color'] ?? null);
-        $sanitized['hard_disk'] = self::sanitizeString($data['hard_disk'] ?? null);
-        $sanitized['cpu_model'] = self::sanitizeString($data['cpu_model'] ?? null);
-        $sanitized['ram'] = self::sanitizeString($data['ram'] ?? null);
-        $sanitized['operating_system'] = self::sanitizeString($data['operating_system'] ?? null);
-        $sanitized['special_features'] = self::sanitizeText($data['special_features'] ?? null);
-        $sanitized['graphics_card'] = self::sanitizeString($data['graphics_card'] ?? null);
+        $sanitized['weight'] = self::sanitizeString($data['weight'] ?? null);
+        $sanitized['dimensions'] = self::sanitizeString($data['dimensions'] ?? null);
         $sanitized['product_url'] = self::sanitizeUrl($data['product_url'] ?? null);
+        $sanitized['category'] = self::sanitizeString($data['category'] ?? null);
+        $sanitized['currency_code'] = self::sanitizeString($data['currency_code'] ?? null);
 
         // Numeric fields
         $sanitized['price'] = self::sanitizePrice($data['price'] ?? null);
@@ -41,12 +38,16 @@ class DataSanitizer
         $sanitized['review_count'] = self::sanitizeInteger($data['review_count'] ?? 0);
 
         // Array fields
-        $sanitized['variants'] = self::sanitizeArray($data['variants'] ?? null);
         $sanitized['image_urls'] = self::sanitizeUrlArray($data['image_urls'] ?? []);
         $sanitized['video_urls'] = self::sanitizeUrlArray($data['video_urls'] ?? []);
+        $sanitized['technical_details'] = self::sanitizeArray($data['technical_details'] ?? null);
+        $sanitized['additional_information'] = self::sanitizeArray($data['additional_information'] ?? null);
 
         // Boolean fields
         $sanitized['is_active'] = isset($data['is_active']) ? (bool) $data['is_active'] : true;
+        $sanitized['bestseller'] = !empty($data['bestseller']);
+        $sanitized['amazon_choice'] = !empty($data['amazon_choice']);
+
 
         // Remove empty values
         return array_filter($sanitized, function ($value) {
@@ -57,30 +58,24 @@ class DataSanitizer
     /**
      * Sanitize string field
      */
-    public static function sanitizeString($value, int $maxLength = null): ?string
-{
-    if ($value === null || $value === '') {
-        return null;
+    public static function sanitizeString(?string $value, int $maxLength = null): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        // Remove HTML tags and normalize whitespace
+        $sanitized = trim(preg_replace('/\s+/', ' ', strip_tags($value)));
+
+        // Remove special characters that might cause issues
+        $sanitized = preg_replace('/[^\p{L}\p{N}\s\-_.,()&\/]/u', '', $sanitized);
+
+        if ($maxLength && strlen($sanitized) > $maxLength) {
+            $sanitized = substr($sanitized, 0, $maxLength);
+        }
+
+        return $sanitized ?: null;
     }
-
-    if (is_array($value)) {
-        // Convert array to comma-separated string
-        $value = implode(',', $value);
-    }
-
-    // Remove HTML tags and normalize whitespace
-    $sanitized = trim(preg_replace('/\s+/', ' ', strip_tags($value)));
-
-    // Remove special characters that might cause issues
-    $sanitized = preg_replace('/[^\p{L}\p{N}\s\-_.,()&\/]/u', '', $sanitized);
-
-    if ($maxLength && strlen($sanitized) > $maxLength) {
-        $sanitized = substr($sanitized, 0, $maxLength);
-    }
-
-    return $sanitized ?: null;
-}
-
 
     /**
      * Sanitize text field (allows more characters)
@@ -94,7 +89,7 @@ class DataSanitizer
         // Remove HTML tags but preserve line breaks
         $sanitized = strip_tags($value);
         $sanitized = trim(preg_replace('/\s+/', ' ', $sanitized));
-        
+
         if ($maxLength && strlen($sanitized) > $maxLength) {
             $sanitized = substr($sanitized, 0, $maxLength);
         }
@@ -112,7 +107,7 @@ class DataSanitizer
         }
 
         $url = trim($url);
-        
+
         // Add protocol if missing
         if (!preg_match('/^https?:\/\//', $url)) {
             $url = 'https://' . $url;
@@ -146,7 +141,7 @@ class DataSanitizer
 
         // Validate price range
         $priceRange = config('scraper.validation.price_range', ['min' => 1000, 'max' => 1000000]);
-        
+
         if ($price < $priceRange['min'] || $price > $priceRange['max']) {
             Log::warning('Price out of valid range', ['price' => $price]);
             return null;
@@ -207,13 +202,13 @@ class DataSanitizer
             return null;
         }
 
+        // अगर string मिली → JSON decode या split
         if (is_string($value)) {
-            // Try to decode JSON
             $decoded = json_decode($value, true);
             if (json_last_error() === JSON_ERROR_NONE) {
                 $value = $decoded;
             } else {
-                // Split by common delimiters
+                // comma, semicolon, pipe से split
                 $value = preg_split('/[,;|]/', $value);
             }
         }
@@ -222,16 +217,25 @@ class DataSanitizer
             return null;
         }
 
-        // Clean array values
-        $sanitized = array_map(function ($item) {
-            return self::sanitizeString($item);
-        }, $value);
+        $sanitized = [];
+        foreach ($value as $key => $item) {
 
-        // Remove empty values
-        $sanitized = array_filter($sanitized);
+            $cleanKey = is_string($key) ? self::sanitizeString($key) : $key;
 
-        return !empty($sanitized) ? array_values($sanitized) : null;
+            if (is_array($item)) {
+                $cleanVal = self::sanitizeArray($item); // recursive
+            } else {
+                $cleanVal = self::sanitizeString((string) $item);
+            }
+
+            if ($cleanVal !== null && $cleanVal !== '') {
+                $sanitized[$cleanKey] = $cleanVal;
+            }
+        }
+
+        return !empty($sanitized) ? $sanitized : null;
     }
+
 
     /**
      * Sanitize array of URLs
@@ -297,7 +301,7 @@ class DataSanitizer
         }
 
         $brand = self::sanitizeString($brand);
-        
+
         // Common brand name mappings
         $brandMappings = [
             'hp' => 'HP',
@@ -332,32 +336,8 @@ class DataSanitizer
             $specs['ram'] = $matches[1] . 'GB';
         }
 
-        // Storage extraction
-        if (preg_match('/(\d+)\s*(GB|TB)\s*(SSD|HDD|Storage)/i', $text, $matches)) {
-            $specs['hard_disk'] = $matches[1] . $matches[2] . ' ' . strtoupper($matches[3]);
-        }
 
-        // Screen size extraction
-        if (preg_match('/(\d+\.?\d*)["\s]*inch/i', $text, $matches)) {
-            $specs['screen_size'] = $matches[1] . '"';
-        }
-
-        // Processor extraction
-        if (preg_match('/(Intel|AMD)\s+([^,\n]+)/i', $text, $matches)) {
-            $specs['cpu_model'] = trim($matches[1] . ' ' . $matches[2]);
-        }
-
-        // Graphics card extraction
-        if (preg_match('/(NVIDIA|AMD|Intel)\s+([^,\n]+Graphics?[^,\n]*)/i', $text, $matches)) {
-            $specs['graphics_card'] = trim($matches[1] . ' ' . $matches[2]);
-        }
-
-        // Operating system extraction
-        if (preg_match('/(Windows|macOS|Linux|Ubuntu|Chrome OS)[^,\n]*/i', $text, $matches)) {
-            $specs['operating_system'] = trim($matches[0]);
-        }
 
         return $specs;
     }
 }
-

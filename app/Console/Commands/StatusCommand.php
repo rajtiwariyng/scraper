@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Services\DatabaseService;
-use App\Models\Laptop;
+use App\Models\Product;
 use App\Models\ScrapingLog;
 use Illuminate\Support\Facades\DB;
 
@@ -40,7 +40,7 @@ class StatusCommand extends Command
         $days = (int) $this->option('days');
         $detailed = $this->option('detailed');
 
-        $this->info("Laptop Scraper System Status");
+        $this->info("Product Scraper System Status");
         $this->line("============================");
 
         try {
@@ -51,7 +51,6 @@ class StatusCommand extends Command
             }
 
             return self::SUCCESS;
-
         } catch (\Exception $e) {
             $this->error("Failed to get status: " . $e->getMessage());
             return self::FAILURE;
@@ -65,13 +64,13 @@ class StatusCommand extends Command
     {
         // System health check
         $this->showSystemHealth();
-        
+
         // Platform performance
         $this->showPlatformPerformance($days);
-        
+
         // Recent activity
         $this->showRecentActivity($days);
-        
+
         if ($detailed) {
             $this->showDetailedStatistics($days);
         }
@@ -130,10 +129,10 @@ class StatusCommand extends Command
         }
 
         // Data freshness
-        $freshData = Laptop::where('last_scraped_at', '>=', now()->subDays(3))->count();
-        $totalData = Laptop::count();
+        $freshData = Product::where('scraped_date', '>=', now()->subDays(3))->count();
+        $totalData = Product::count();
         $freshPercentage = $totalData > 0 ? round(($freshData / $totalData) * 100, 1) : 0;
-        
+
         if ($freshPercentage > 80) {
             $this->line("✓ Data Freshness: {$freshPercentage}% of data is fresh (< 3 days old)");
         } elseif ($freshPercentage > 50) {
@@ -161,7 +160,7 @@ class StatusCommand extends Command
         foreach ($performance as $platformKey => $data) {
             $lastRun = $data['last_run'] ? $data['last_run']->format('Y-m-d H:i') : 'Never';
             $successRate = $data['success_rate'] . '%';
-            
+
             $rows[] = [
                 $data['name'],
                 $successRate,
@@ -184,7 +183,7 @@ class StatusCommand extends Command
         $this->line("====================================");
 
         $recentLogs = $this->databaseService->getRecentScrapingLogs($days);
-        
+
         if ($recentLogs->isEmpty()) {
             $this->line("No recent activity found.");
             $this->newLine();
@@ -218,10 +217,10 @@ class StatusCommand extends Command
         $this->line("===================");
 
         // Product statistics
-        $totalProducts = Laptop::count();
-        $activeProducts = Laptop::where('is_active', true)->count();
-        $productsWithImages = Laptop::whereNotNull('image_urls')->count();
-        $productsWithRatings = Laptop::whereNotNull('rating')->count();
+        $totalProducts = Product::count();
+        $activeProducts = Product::where('is_active', true)->count();
+        $productsWithImages = Product::whereNotNull('image_urls')->count();
+        $productsWithRatings = Product::whereNotNull('rating')->count();
 
         $this->line("Product Statistics:");
         $this->line("- Total Products: {$totalProducts}");
@@ -230,9 +229,9 @@ class StatusCommand extends Command
         $this->line("- Products with Ratings: {$productsWithRatings}");
 
         // Price statistics
-        $avgPrice = Laptop::where('is_active', true)->avg('price');
-        $minPrice = Laptop::where('is_active', true)->min('price');
-        $maxPrice = Laptop::where('is_active', true)->max('price');
+        $avgPrice = Product::where('is_active', true)->avg('price');
+        $minPrice = Product::where('is_active', true)->min('price');
+        $maxPrice = Product::where('is_active', true)->max('price');
 
         $this->newLine();
         $this->line("Price Statistics:");
@@ -241,13 +240,13 @@ class StatusCommand extends Command
         $this->line("- Maximum Price: ₹" . number_format($maxPrice ?? 0, 2));
 
         // Brand distribution
-        $topBrands = Laptop::where('is_active', true)
-                          ->whereNotNull('brand')
-                          ->groupBy('brand')
-                          ->selectRaw('brand, COUNT(*) as count')
-                          ->orderBy('count', 'desc')
-                          ->limit(5)
-                          ->get();
+        $topBrands = Product::where('is_active', true)
+            ->whereNotNull('brand')
+            ->groupBy('brand')
+            ->selectRaw('brand, COUNT(*) as count')
+            ->orderBy('count', 'desc')
+            ->limit(5)
+            ->get();
 
         $this->newLine();
         $this->line("Top Brands:");
@@ -282,7 +281,7 @@ class StatusCommand extends Command
     protected function showPlatformLogs($logs, int $days): void
     {
         $this->line("Recent Scraping Sessions (Last {$days} days):");
-        
+
         if ($logs->isEmpty()) {
             $this->line("No recent scraping sessions found.");
             return;
@@ -313,14 +312,13 @@ class StatusCommand extends Command
     {
         $this->newLine();
         $this->line("Platform Configuration:");
-        
+
         $config = config("scraper.platforms.{$platform}");
         $this->line("- Base URL: " . $config['base_url']);
-        $this->line("- Category URLs: " . count($config['laptop_urls']));
-        
-        foreach ($config['laptop_urls'] as $i => $url) {
+        $this->line("- Category URLs: " . count($config['category_urls']));
+
+        foreach ($config['category_urls'] as $i => $url) {
             $this->line("  " . ($i + 1) . ". {$url}");
         }
     }
 }
-

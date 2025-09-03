@@ -12,9 +12,8 @@ class BrowserService
     public function __construct()
     {
         $this->defaultOptions = [
-            'timeout' => 300,
+            'timeout' => 120, // Increased from 60 to 120 seconds
             'waitUntilNetworkIdle' => true,
-            'delay' => 5000, // 5 sec delay
             'userAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'windowSize' => [1920, 1080],
             'args' => [
@@ -23,7 +22,10 @@ class BrowserService
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-web-security',
-                '--disable-features=VizDisplayCompositor'
+                '--disable-features=VizDisplayCompositor',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ]
         ];
     }
@@ -31,39 +33,67 @@ class BrowserService
     /**
      * Get page content with JavaScript rendering
      */
-    public function getPageContent(string $url, int $waitTime = 5): ?string
+    public function getPageContent(string $url, int $waitTime = 3): ?string
     {
-        try {
-            Log::info("Fetching page content with browser", ['url' => $url]);
+        $attempts = 0;
+        $maxAttempts = 3;
+        
+        while ($attempts < $maxAttempts) {
+            try {
+                Log::info("Fetching page content with browser (attempt " . ($attempts + 1) . ")", ['url' => $url]);
 
-            $browsershot = Browsershot::url($url)
-                ->timeout($this->defaultOptions['timeout'])
-                ->userAgent($this->defaultOptions['userAgent'])
-                ->windowSize($this->defaultOptions['windowSize'][0], $this->defaultOptions['windowSize'][1])
-                ->waitUntilNetworkIdle()
-                ->delay($waitTime * 1000); // Convert to milliseconds
+                $timeout = $attempts === 0 ? $this->defaultOptions['timeout'] : ($this->defaultOptions['timeout'] * 2);
+                
+                $browsershot = Browsershot::url($url)
+                    ->timeout($timeout)
+                    ->userAgent($this->defaultOptions['userAgent'])
+                    ->windowSize($this->defaultOptions['windowSize'][0], $this->defaultOptions['windowSize'][1])
+                    ->delay($waitTime * 1000); // Convert to milliseconds
 
-            // Add Chrome arguments
-            foreach ($this->defaultOptions['args'] as $arg) {
-                $browsershot->addChromiumArguments([$arg]);
+                // Add Chrome arguments
+                foreach ($this->defaultOptions['args'] as $arg) {
+                    $browsershot->addChromiumArguments([$arg]);
+                }
+
+                // Try with network idle first, then fallback to load event
+                if ($attempts === 0) {
+                    $browsershot->waitUntilNetworkIdle();
+                } else {
+                    // Fallback: just wait for load event
+                    $browsershot->waitForFunction('document.readyState === "complete"', 30000);
+                }
+
+                $html = $browsershot->bodyHtml();
+
+                Log::info("Successfully fetched page content", [
+                    'url' => $url,
+                    'content_length' => strlen($html),
+                    'attempt' => $attempts + 1
+                ]);
+
+                return $html;
+
+            } catch (\Exception $e) {
+                $attempts++;
+                
+                Log::warning("Browser attempt {$attempts} failed for URL: {$url}", [
+                    'error' => $e->getMessage(),
+                    'attempt' => $attempts
+                ]);
+                
+                if ($attempts < $maxAttempts) {
+                    // Wait before retry
+                    sleep(5 * $attempts);
+                }
             }
-
-            $html = $browsershot->bodyHtml();
-
-            Log::info("Successfully fetched page content", [
-                'url' => $url,
-                'content_length' => strlen($html)
-            ]);
-
-            return $html;
-
-        } catch (\Exception $e) {
-            Log::error('Browser service error', [
-                'url' => $url,
-                'error' => $e->getMessage()
-            ]);
-            return null;
         }
+        
+        Log::error('All browser attempts failed', [
+            'url' => $url,
+            'attempts' => $maxAttempts
+        ]);
+        
+        return null;
     }
 
     /**

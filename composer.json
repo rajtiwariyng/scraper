@@ -1,8 +1,8 @@
 {
-    "name": "laptop-scraper/app",
+    "name": "product-scraper/app",
     "type": "project",
-    "description": "Laptop Data Scraper Tool for E-commerce Platforms",
-    "keywords": ["laravel", "scraper", "e-commerce", "laptops"],
+    "description": "Product Data Scraper Tool for E-commerce Platforms",
+    "keywords": ["laravel", "scraper", "e-commerce", "products"],
     "license": "MIT",
     "require": {
         "php": "^8.1",

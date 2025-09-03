@@ -2,7 +2,7 @@
 
 namespace App\Services\Scrapers;
 
-use App\Models\Laptop;
+use App\Models\Product;
 use App\Models\ScrapingLog;
 use App\Services\BrowserService;
 use GuzzleHttp\Client;
@@ -26,12 +26,48 @@ abstract class BaseScraper
         'errors_count' => 0
     ];
 
+    protected float $startTime;
+    protected int $maxExecutionTime = 3600; // 1 hour default limit
+    protected ?\App\Services\ProxyRotator $proxyRotator = null;
+
     public function __construct(string $platform)
     {
         $this->platform = $platform;
+        $this->startTime = microtime(true);
+        $this->maxExecutionTime = config('scraper.schedule.max_execution_time', 3600); // Use config value
+
+        // Set PHP execution time limit
+        set_time_limit($this->maxExecutionTime + 300); // Add 5 minutes buffer
+
+        // Initialize proxy rotator if proxies are configured
+        $this->proxyRotator = new \App\Services\ProxyRotator();
+        if (!$this->proxyRotator->hasProxies()) {
+            $this->proxyRotator = null;
+        }
+
         $this->browserService = new BrowserService();
         $this->initializeHttpClient();
         $this->setupPlatformConfig();
+    }
+
+    /**
+     * Check if execution time limit is reached
+     */
+    protected function isExecutionTimeLimitReached(): bool
+    {
+        $currentTime = microtime(true);
+        $elapsedTime = $currentTime - $this->startTime;
+
+        if ($elapsedTime > $this->maxExecutionTime) {
+            Log::warning("Execution time limit reached", [
+                'platform' => $this->platform,
+                'elapsed_time' => round($elapsedTime, 2),
+                'max_time' => $this->maxExecutionTime
+            ]);
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -44,12 +80,11 @@ abstract class BaseScraper
             'headers' => [
                 'User-Agent' => config('scraper.user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'),
                 'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language' => 'en-US,en;q=0.9',
-                'Accept-Encoding' => 'gzip, deflate, br',
+                'Accept-Language' => 'en-US,en;q=0.5',
+                'Accept-Encoding' => 'gzip, deflate',
                 'Connection' => 'keep-alive',
                 'Upgrade-Insecure-Requests' => '1',
             ],
-            'cookies' => true,
             'verify' => false,
             'allow_redirects' => true,
             'http_errors' => false
@@ -62,10 +97,10 @@ abstract class BaseScraper
     public function scrape(array $categoryUrls): void
     {
         $this->scrapingLog = ScrapingLog::startSession($this->platform);
-        
+
         try {
             Log::info("Starting scraping for platform: {$this->platform}");
-            
+
             foreach ($categoryUrls as $categoryUrl) {
                 if ($this->useJavaScript) {
                     $this->scrapeCategoryWithBrowser($categoryUrl);
@@ -73,12 +108,11 @@ abstract class BaseScraper
                     $this->scrapeCategoryWithPagination($categoryUrl);
                 }
             }
-            
+
             $this->deactivateOldProducts();
             $this->scrapingLog->complete($this->stats);
-            
+
             Log::info("Completed scraping for platform: {$this->platform}", $this->stats);
-            
         } catch (\Exception $e) {
             $this->scrapingLog->fail($e->getMessage(), [
                 'exception' => get_class($e),
@@ -86,12 +120,12 @@ abstract class BaseScraper
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ], $this->stats);
-            
+
             Log::error("Scraping failed for platform: {$this->platform}", [
                 'error' => $e->getMessage(),
                 'stats' => $this->stats
             ]);
-            
+
             throw $e;
         }
     }
@@ -110,8 +144,14 @@ abstract class BaseScraper
         $failedPages = [];
 
         while ($currentPage <= $maxPages && $noProductsCount < $maxNoProductsPages && $consecutiveErrors < $maxConsecutiveErrors) {
+            // Check execution time limit
+            if ($this->isExecutionTimeLimitReached()) {
+                Log::warning("Stopping pagination due to execution time limit");
+                break;
+            }
+
             $pageUrl = $this->buildPageUrl($categoryUrl, $currentPage);
-            
+
             Log::info("Scraping page {$currentPage} for {$this->platform}", [
                 'url' => $pageUrl,
                 'page' => $currentPage,
@@ -120,7 +160,7 @@ abstract class BaseScraper
 
             try {
                 $pageProductCount = $this->scrapeCategoryPage($pageUrl);
-                
+
                 if ($pageProductCount === 0) {
                     $noProductsCount++;
                     Log::info("No products found on page {$currentPage}, count: {$noProductsCount}");
@@ -134,11 +174,10 @@ abstract class BaseScraper
                     Log::info("Stopping pagination at page {$currentPage}");
                     break;
                 }
-
             } catch (\Exception $e) {
                 $consecutiveErrors++;
                 $failedPages[] = $currentPage;
-                
+
                 Log::warning("Error on page {$currentPage}: {$e->getMessage()}", [
                     'page' => $currentPage,
                     'consecutive_errors' => $consecutiveErrors,
@@ -153,7 +192,7 @@ abstract class BaseScraper
             }
 
             $currentPage++;
-            
+
             // Use configured delay between pages
             $delayRange = $this->paginationConfig['delay_between_pages'] ?? [2, 5];
             $delay = is_array($delayRange) ? rand($delayRange[0], $delayRange[1]) : $delayRange;
@@ -180,7 +219,7 @@ abstract class BaseScraper
     protected function retryFailedPages(string $categoryUrl, array $failedPages): void
     {
         $maxRetries = $this->paginationConfig['max_retries_per_page'] ?? 2;
-        
+
         Log::info("Retrying {count} failed pages", [
             'count' => count($failedPages),
             'platform' => $this->platform,
@@ -189,21 +228,20 @@ abstract class BaseScraper
 
         foreach ($failedPages as $pageNumber) {
             $pageUrl = $this->buildPageUrl($categoryUrl, $pageNumber);
-            
+
             for ($retry = 1; $retry <= $maxRetries; $retry++) {
                 try {
                     Log::info("Retrying page {$pageNumber}, attempt {$retry}");
-                    
+
                     $pageProductCount = $this->scrapeCategoryPage($pageUrl);
-                    
+
                     if ($pageProductCount > 0) {
                         Log::info("Successfully retried page {$pageNumber}, found {$pageProductCount} products");
                         break; // Success, move to next page
                     }
-                    
                 } catch (\Exception $e) {
                     Log::warning("Retry {$retry} failed for page {$pageNumber}: {$e->getMessage()}");
-                    
+
                     if ($retry < $maxRetries) {
                         // Wait longer between retries
                         sleep(rand(5, 10));
@@ -222,17 +260,17 @@ abstract class BaseScraper
             if ($this->paginationConfig['type'] === 'infinite_scroll') {
                 // Handle infinite scroll pages
                 $content = $this->browserService->getInfiniteScrollContent(
-                    $categoryUrl, 
+                    $categoryUrl,
                     $this->paginationConfig['scroll_count'] ?? 10
                 );
-                
+
                 if ($content) {
                     $this->processPageContent($content, $categoryUrl);
                 }
             } else {
                 // Handle regular pagination with JS
                 $allPages = $this->browserService->getAllPagesContent($categoryUrl, $this->paginationConfig);
-                
+
                 foreach ($allPages as $pageData) {
                     $this->processPageContent($pageData['content'], $pageData['url']);
                 }
@@ -250,7 +288,7 @@ abstract class BaseScraper
         try {
             $crawler = new Crawler($html);
             $productUrls = $this->extractProductUrls($crawler, $pageUrl);
-            
+
             Log::info("Found {count} products on page", [
                 'count' => count($productUrls),
                 'platform' => $this->platform,
@@ -263,7 +301,6 @@ abstract class BaseScraper
             }
 
             return count($productUrls);
-            
         } catch (\Exception $e) {
             $this->handleError("Failed to process page content: {$pageUrl}", $e);
             return 0;
@@ -282,7 +319,6 @@ abstract class BaseScraper
             }
 
             return $this->processPageContent($html, $categoryUrl);
-            
         } catch (\Exception $e) {
             $this->handleError("Failed to scrape category page: {$categoryUrl}", $e);
             return 0;
@@ -295,17 +331,17 @@ abstract class BaseScraper
     protected function scrapeProductPage(string $productUrl): void
     {
         try {
-            $html = $this->useJavaScript ? 
-                $this->browserService->getPageContent($productUrl, 3) : 
+            $html = $this->useJavaScript ?
+                $this->browserService->getPageContent($productUrl, 3) :
                 $this->fetchPage($productUrl);
-                
+
             if (!$html) {
                 return;
             }
 
             $crawler = new Crawler($html);
             $productData = $this->extractProductData($crawler, $productUrl);
-            
+
             if (!$productData || !isset($productData['sku'])) {
                 Log::warning("No valid product data found", [
                     'platform' => $this->platform,
@@ -316,7 +352,6 @@ abstract class BaseScraper
 
             $this->saveProductData($productData);
             $this->stats['products_found']++;
-            
         } catch (\Exception $e) {
             $this->handleError("Failed to scrape product page: {$productUrl}", $e);
         }
@@ -333,7 +368,7 @@ abstract class BaseScraper
 
         $pageParam = $this->paginationConfig['page_param'] ?? 'page';
         $separator = strpos($baseUrl, '?') !== false ? '&' : '?';
-        
+
         return $baseUrl . $separator . $pageParam . '=' . $page;
     }
 
@@ -364,31 +399,69 @@ abstract class BaseScraper
     {
         for ($attempt = 1; $attempt <= $retries; $attempt++) {
             try {
-                $response = $this->httpClient->get($url);
-                
+                $options = [];
+
+                // Add platform-specific headers if available, otherwise use randomized headers
+                if (!empty($this->defaultHeaders)) {
+                    $options['headers'] = $this->defaultHeaders;
+                } else {
+                    // Use randomized headers for better anti-blocking
+                    $userAgentRotator = new \App\Services\UserAgentRotator();
+                    $options['headers'] = $userAgentRotator->getRandomizedHeaders();
+                }
+
+                // Add proxy if available
+                $currentProxy = null;
+                if ($this->proxyRotator) {
+                    $currentProxy = $this->proxyRotator->getNextProxy();
+                    if ($currentProxy) {
+                        $options['proxy'] = $currentProxy;
+                        Log::debug("Using proxy for request", ['url' => $url, 'attempt' => $attempt]);
+                    }
+                }
+
+                // Add timeout
+                $options['timeout'] = 30;
+                $options['connect_timeout'] = 10;
+
+                $response = $this->httpClient->get($url, $options);
+
                 if ($response->getStatusCode() === 200) {
                     return $response->getBody()->getContents();
                 }
-                
+
                 Log::warning("HTTP error {status} for URL: {url}", [
                     'status' => $response->getStatusCode(),
                     'url' => $url,
-                    'attempt' => $attempt
+                    'attempt' => $attempt,
+                    'using_proxy' => $currentProxy ? 'yes' : 'no'
                 ]);
-                
+
+                // Mark proxy as failed if we got a bad status code
+                if ($currentProxy && $response->getStatusCode() >= 400) {
+                    $this->proxyRotator->markProxyAsFailed($currentProxy);
+                }
             } catch (RequestException $e) {
                 Log::warning("Request failed for URL: {url} (Attempt {attempt})", [
                     'url' => $url,
                     'attempt' => $attempt,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'using_proxy' => $currentProxy ? 'yes' : 'no'
                 ]);
+
+                // Mark proxy as failed if the request failed
+                if ($currentProxy) {
+                    $this->proxyRotator->markProxyAsFailed($currentProxy);
+                }
             }
-            
+
             if ($attempt < $retries) {
-                sleep(pow(2, $attempt)); // Exponential backoff
+                // Exponential backoff with randomization
+                $delay = pow(2, $attempt) + rand(1, 3);
+                sleep($delay);
             }
         }
-        
+
         return null;
     }
 
@@ -398,17 +471,17 @@ abstract class BaseScraper
     protected function saveProductData(array $productData): void
     {
         $productData['platform'] = $this->platform;
-        $productData['last_scraped_at'] = now();
-        
-        $existingProduct = Laptop::findByPlatformAndSku($this->platform, $productData['sku']);
-        
+        $productData['scraped_date'] = now();
+
+        $existingProduct = Product::findByPlatformAndSku($this->platform, $productData['sku']);
+
         if ($existingProduct) {
             if ($existingProduct->updateIfChanged($productData)) {
                 $this->stats['products_updated']++;
                 Log::debug("Updated product: {sku}", ['sku' => $productData['sku']]);
             }
         } else {
-            Laptop::create($productData);
+            Product::create($productData);
             $this->stats['products_added']++;
             Log::debug("Added new product: {sku}", ['sku' => $productData['sku']]);
         }
@@ -420,14 +493,14 @@ abstract class BaseScraper
     protected function deactivateOldProducts(): void
     {
         $cutoffTime = $this->scrapingLog->started_at->subHours(1);
-        
-        $deactivatedCount = Laptop::where('platform', $this->platform)
+
+        $deactivatedCount = Product::where('platform', $this->platform)
             ->where('is_active', true)
-            ->where('last_scraped_at', '<', $cutoffTime)
+            ->where('scraped_date', '<', $cutoffTime)
             ->update(['is_active' => false]);
-            
+
         $this->stats['products_deactivated'] = $deactivatedCount;
-        
+
         if ($deactivatedCount > 0) {
             Log::info("Deactivated {count} old products", [
                 'count' => $deactivatedCount,
@@ -448,7 +521,7 @@ abstract class BaseScraper
             'file' => $e->getFile(),
             'line' => $e->getLine()
         ]);
-        
+
         Log::error($message, [
             'platform' => $this->platform,
             'error' => $e->getMessage()
@@ -474,7 +547,7 @@ abstract class BaseScraper
         if (!$text) {
             return null;
         }
-        
+
         return trim(preg_replace('/\s+/', ' ', strip_tags($text)));
     }
 
@@ -486,11 +559,11 @@ abstract class BaseScraper
         if (!$priceText) {
             return null;
         }
-        
+
         // Remove currency symbols and extract numeric value
         $price = preg_replace('/[^\d.,]/', '', $priceText);
         $price = str_replace(',', '', $price);
-        
+
         return is_numeric($price) ? (float) $price : null;
     }
 
@@ -502,7 +575,7 @@ abstract class BaseScraper
         if (!$ratingText) {
             return null;
         }
-        
+
         preg_match('/(\d+\.?\d*)/', $ratingText, $matches);
         return isset($matches[1]) ? (float) $matches[1] : null;
     }
@@ -515,7 +588,7 @@ abstract class BaseScraper
         if (!$reviewText) {
             return 0;
         }
-        
+
         $reviewText = str_replace(',', '', $reviewText);
         preg_match('/(\d+)/', $reviewText, $matches);
         return isset($matches[1]) ? (int) $matches[1] : 0;
@@ -526,4 +599,3 @@ abstract class BaseScraper
     abstract protected function extractProductUrls(Crawler $crawler, string $categoryUrl): array;
     abstract protected function extractProductData(Crawler $crawler, string $productUrl): array;
 }
-

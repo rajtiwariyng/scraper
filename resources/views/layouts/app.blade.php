@@ -1,18 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Laptop Data Scraper Dashboard')</title>
-    
+    <title>@yield('title', 'Product Data Scraper Dashboard')</title>
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
+
     <style>
         :root {
             --primary-color: #2563eb;
@@ -103,9 +104,17 @@
             margin-right: 0.5rem;
         }
 
-        .health-healthy { background-color: var(--success-color); }
-        .health-warning { background-color: var(--warning-color); }
-        .health-error { background-color: var(--danger-color); }
+        .health-healthy {
+            background-color: var(--success-color);
+        }
+
+        .health-warning {
+            background-color: var(--warning-color);
+        }
+
+        .health-error {
+            background-color: var(--danger-color);
+        }
 
         .platform-card {
             background: white;
@@ -127,11 +136,11 @@
             .sidebar {
                 transform: translateX(-100%);
             }
-            
+
             .sidebar.show {
                 transform: translateX(0);
             }
-            
+
             .main-content {
                 margin-left: 0;
             }
@@ -156,17 +165,18 @@
 
     @stack('styles')
 </head>
+
 <body>
     <!-- Sidebar -->
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h4 class="mb-0">
                 <i class="fas fa-laptop me-2"></i>
-                Laptop Scraper
+                Product Scraper
             </h4>
             <small class="text-light opacity-75">Data Monitoring Dashboard</small>
         </div>
-        
+
         <ul class="nav flex-column sidebar-nav">
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('dashboard.index') ? 'active' : '' }}" href="{{ route('dashboard.index') }}">
@@ -174,7 +184,7 @@
                     Dashboard
                 </a>
             </li>
-           
+
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('dashboard.products') ? 'active' : '' }}" href="{{ route('dashboard.products') }}">
                     <i class="fas fa-laptop me-2"></i>
@@ -187,14 +197,14 @@
                     Scraping Logs
                 </a>
             </li>
-            
+
             <li class="nav-item mt-3">
                 <h6 class="px-3 text-light opacity-75 text-uppercase small">Platforms</h6>
             </li>
             @foreach(config('scraper.platforms', []) as $key => $platform)
             <li class="nav-item">
-                <a class="nav-link {{ request()->route('platform') === $key ? 'active' : '' }}" 
-                   href="{{ route('dashboard.platform', $key) }}">
+                <a class="nav-link {{ request()->route('platform') === $key ? 'active' : '' }}"
+                    href="{{ route('dashboard.platform', $key) }}">
                     <i class="fas fa-store me-2"></i>
                     {{ $platform['name'] }}
                 </a>
@@ -212,7 +222,7 @@
                 <button class="btn btn-outline-secondary d-lg-none" type="button" onclick="toggleSidebar()">
                     <i class="fas fa-bars"></i>
                 </button>
-                
+
                 <div class="navbar-nav ms-auto">
                     <div class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -221,11 +231,11 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="#" onclick="refreshData()">
-                                <i class="fas fa-sync me-2"></i>Refresh Data
-                            </a></li>
+                                    <i class="fas fa-sync me-2"></i>Refresh Data
+                                </a></li>
                             <li><a class="dropdown-item" href="#" onclick="exportData()">
-                                <i class="fas fa-download me-2"></i>Export Data
-                            </a></li>
+                                    <i class="fas fa-download me-2"></i>Export Data
+                                </a></li>
                         </ul>
                     </div>
                 </div>
@@ -235,17 +245,17 @@
         <!-- Page Content -->
         <div class="container-fluid p-4">
             @if(session('success'))
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
             @endif
 
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
             @endif
 
             @yield('content')
@@ -254,7 +264,7 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <script>
         // Global functions
         function toggleSidebar() {
@@ -304,5 +314,5 @@
 
     @stack('scripts')
 </body>
-</html>
 
+</html>

@@ -11,13 +11,18 @@ class FlipkartScraper extends BaseScraper
     protected function setupPlatformConfig(): void
     {
         $this->platform = 'flipkart';
-        $this->useJavaScript = false; // Flipkart works with regular HTTP requests
+        $this->useJavaScript = false; // Start with HTTP, fallback to browser
         $this->paginationConfig = [
             'type' => 'regular',
             'max_pages' => 100,
             'page_param' => 'page',
             'has_next_selector' => '._1LKTO3:last-child:not(._34Gtpf)',
+            'delay_between_pages' => [5, 12], // Increased delays to avoid detection
+            'max_consecutive_errors' => 2, // Reduced to trigger browser fallback faster
         ];
+
+        // Will be set dynamically using UserAgentRotator
+        $this->defaultHeaders = [];
     }
 
     public function __construct()
@@ -26,16 +31,115 @@ class FlipkartScraper extends BaseScraper
     }
 
     /**
+     * Override scrape method to implement browser fallback for 403 errors
+     */
+    public function scrape(array $categoryUrls): array
+    {
+        $this->stats = [
+            'products_found' => 0,
+            'products_updated' => 0,
+            'products_added' => 0,
+            'products_deactivated' => 0,
+            'errors_count' => 0
+        ];
+
+        Log::info("Starting Flipkart scraping with HTTP requests", [
+            'platform' => $this->platform,
+            'categories' => count($categoryUrls)
+        ]);
+
+        $httpSuccess = false;
+
+        foreach ($categoryUrls as $categoryUrl) {
+            // Try HTTP first
+            if ($this->tryHttpScraping($categoryUrl)) {
+                $httpSuccess = true;
+            } else {
+                // If HTTP fails, switch to browser automation
+                Log::warning("HTTP scraping failed for Flipkart, switching to browser automation");
+                $this->useJavaScript = true;
+                $this->scrapeCategoryWithBrowser($categoryUrl);
+            }
+
+            if ($this->isExecutionTimeLimitReached()) {
+                break;
+            }
+        }
+
+        return $this->stats;
+    }
+
+    /**
+     * Try HTTP scraping with enhanced anti-blocking measures
+     */
+    private function tryHttpScraping(string $categoryUrl): bool
+    {
+        $userAgentRotator = new \App\Services\UserAgentRotator();
+        $attempts = 0;
+        $maxAttempts = 3;
+
+        while ($attempts < $maxAttempts) {
+            try {
+                // Get randomized headers for this attempt
+                $this->defaultHeaders = $userAgentRotator->getBrowserSessionHeaders();
+
+                Log::info("Attempting HTTP scraping for Flipkart", [
+                    'attempt' => $attempts + 1,
+                    'url' => $categoryUrl,
+                    'user_agent' => substr($this->defaultHeaders['User-Agent'], 0, 50) . '...'
+                ]);
+
+                // Add random delay before request
+                sleep(rand(3, 8));
+
+                $html = $this->fetchPage($categoryUrl);
+
+                if ($html && strlen($html) > 1000) {
+                    // Process the page if we got valid content
+                    $productCount = $this->processPageContent($html, $categoryUrl);
+
+                    if ($productCount > 0) {
+                        Log::info("HTTP scraping successful for Flipkart", [
+                            'products_found' => $productCount,
+                            'attempt' => $attempts + 1
+                        ]);
+
+                        // Continue with pagination if first page was successful
+                        $this->scrapeCategoryWithPagination($categoryUrl);
+                        return true;
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning("HTTP attempt failed for Flipkart", [
+                    'attempt' => $attempts + 1,
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            $attempts++;
+
+            // Exponential backoff with randomization
+            if ($attempts < $maxAttempts) {
+                $delay = pow(2, $attempts) * rand(3, 7);
+                Log::info("Waiting {$delay} seconds before next attempt");
+                sleep($delay);
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Extract product URLs from Flipkart search/category page
      */
     protected function extractProductUrls(Crawler $crawler, string $categoryUrl): array
     {
         $productUrls = [];
-        
+
         try {
             // Flipkart product links patterns
             $selectors = [
-                '.tUxRFH a',
+                '._1fQZEK a',
                 '._4rR01T a',
                 '[data-id] a',
                 '.s1Q9rs a',
@@ -50,8 +154,8 @@ class FlipkartScraper extends BaseScraper
                         if (strpos($href, 'http') !== 0) {
                             $href = 'https://www.flipkart.com' . $href;
                         }
-                        
-                        // Only include laptop product pages
+
+                        // Only include Product product pages
                         if (strpos($href, '/p/') !== false) {
                             $productUrls[] = $href;
                         }
@@ -67,7 +171,6 @@ class FlipkartScraper extends BaseScraper
                 'count' => count($productUrls),
                 'category_url' => $categoryUrl
             ]);
-
         } catch (\Exception $e) {
             Log::error("Failed to extract product URLs from Flipkart", [
                 'error' => $e->getMessage(),
@@ -96,7 +199,7 @@ class FlipkartScraper extends BaseScraper
             $data['product_url'] = $productUrl;
 
             // Product name
-            $data['product_name'] = $this->extractProductName($crawler);
+            $data['title'] = $this->extractProductName($crawler);
 
             // Description
             $data['description'] = $this->extractDescription($crawler);
@@ -133,15 +236,14 @@ class FlipkartScraper extends BaseScraper
             $data['variants'] = $this->extractVariants($crawler);
 
             // Sanitize all data
-            $data = DataSanitizer::sanitizeLaptopData($data);
+            $data = DataSanitizer::sanitizeProductData($data);
 
             Log::debug("Extracted Flipkart product data", [
                 'sku' => $data['sku'],
-                'product_name' => $data['product_name'] ?? 'N/A'
+                'title' => $data['title'] ?? 'N/A'
             ]);
 
             return $data;
-
         } catch (\Exception $e) {
             Log::error("Failed to extract Flipkart product data", [
                 'url' => $productUrl,
@@ -160,7 +262,7 @@ class FlipkartScraper extends BaseScraper
         if (preg_match('/\/p\/([a-zA-Z0-9]+)/', $url, $matches)) {
             return $matches[1];
         }
-        
+
         if (preg_match('/pid=([A-Z0-9]+)/', $url, $matches)) {
             return $matches[1];
         }
@@ -373,9 +475,9 @@ class FlipkartScraper extends BaseScraper
         // Try to extract from product title
         $title = $this->extractProductName($crawler);
         if ($title) {
-            // Common laptop brands
+            // Common Product brands
             $brands = ['HP', 'Dell', 'Lenovo', 'ASUS', 'Acer', 'Apple', 'MSI', 'Samsung', 'LG', 'Sony', 'Toshiba'];
-            
+
             foreach ($brands as $brand) {
                 if (stripos($title, $brand) !== false) {
                     $data['brand'] = $brand;
@@ -390,7 +492,7 @@ class FlipkartScraper extends BaseScraper
             if ($cells->count() >= 2) {
                 $label = $this->cleanText($cells->eq(0)->text());
                 $value = $this->cleanText($cells->eq(1)->text());
-                
+
                 if (stripos($label, 'brand') !== false) {
                     $data['brand'] = $value;
                 }
@@ -416,25 +518,7 @@ class FlipkartScraper extends BaseScraper
             if ($cells->count() >= 2) {
                 $label = strtolower($this->cleanText($cells->eq(0)->text()));
                 $value = $this->cleanText($cells->eq(1)->text());
-                
-                if (strpos($label, 'screen') !== false || strpos($label, 'display') !== false) {
-                    $specs['screen_size'] = $value;
-                }
-                if (strpos($label, 'ram') !== false || strpos($label, 'memory') !== false) {
-                    $specs['ram'] = $value;
-                }
-                if (strpos($label, 'storage') !== false || strpos($label, 'hard') !== false || strpos($label, 'ssd') !== false) {
-                    $specs['hard_disk'] = $value;
-                }
-                if (strpos($label, 'processor') !== false || strpos($label, 'cpu') !== false) {
-                    $specs['cpu_model'] = $value;
-                }
-                if (strpos($label, 'graphics') !== false || strpos($label, 'gpu') !== false) {
-                    $specs['graphics_card'] = $value;
-                }
-                if (strpos($label, 'operating') !== false || strpos($label, 'os') !== false) {
-                    $specs['operating_system'] = $value;
-                }
+
                 if (strpos($label, 'color') !== false || strpos($label, 'colour') !== false) {
                     $specs['color'] = $value;
                 }
@@ -510,4 +594,3 @@ class FlipkartScraper extends BaseScraper
         return !empty($variants) ? $variants : null;
     }
 }
-

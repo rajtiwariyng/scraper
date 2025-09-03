@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Services\DatabaseService;
-use App\Models\Laptop;
+use App\Models\Product;
 use App\Models\ScrapingLog;
 use Illuminate\Support\Facades\Log;
 
@@ -41,7 +41,7 @@ class CleanupCommand extends Command
         $dryRun = $this->option('dry-run');
 
         $this->info("Starting cleanup process...");
-        
+
         if ($dryRun) {
             $this->warn("DRY RUN MODE - No data will be deleted");
         }
@@ -49,16 +49,15 @@ class CleanupCommand extends Command
         try {
             // Clean up old logs
             $this->cleanupLogs($logRetentionDays, $dryRun);
-            
+
             // Clean up old inactive products
             $this->cleanupInactiveProducts($inactiveRetentionDays, $dryRun);
-            
+
             // Show statistics
             $this->showStatistics();
 
             $this->info("Cleanup completed successfully!");
             return self::SUCCESS;
-
         } catch (\Exception $e) {
             $this->error("Cleanup failed: " . $e->getMessage());
             Log::error("Cleanup command failed", [
@@ -75,7 +74,7 @@ class CleanupCommand extends Command
     protected function cleanupLogs(int $retentionDays, bool $dryRun): void
     {
         $cutoffDate = now()->subDays($retentionDays);
-        
+
         $query = ScrapingLog::where('created_at', '<', $cutoffDate);
         $count = $query->count();
 
@@ -89,7 +88,7 @@ class CleanupCommand extends Command
         } else {
             $deleted = $query->delete();
             $this->info("Deleted {$deleted} scraping logs older than {$retentionDays} days");
-            
+
             Log::info("Cleaned up old scraping logs", [
                 'deleted_count' => $deleted,
                 'retention_days' => $retentionDays
@@ -103,10 +102,10 @@ class CleanupCommand extends Command
     protected function cleanupInactiveProducts(int $retentionDays, bool $dryRun): void
     {
         $cutoffDate = now()->subDays($retentionDays);
-        
-        $query = Laptop::where('is_active', false)
-                      ->where('updated_at', '<', $cutoffDate);
-        
+
+        $query = Product::where('is_active', false)
+            ->where('updated_at', '<', $cutoffDate);
+
         $count = $query->count();
 
         if ($count === 0) {
@@ -119,7 +118,7 @@ class CleanupCommand extends Command
         } else {
             $deleted = $query->delete();
             $this->info("Deleted {$deleted} inactive products older than {$retentionDays} days");
-            
+
             Log::info("Cleaned up old inactive products", [
                 'deleted_count' => $deleted,
                 'retention_days' => $retentionDays
@@ -152,9 +151,9 @@ class CleanupCommand extends Command
         $this->newLine();
 
         // Overall statistics
-        $totalProducts = Laptop::count();
-        $activeProducts = Laptop::where('is_active', true)->count();
-        $inactiveProducts = Laptop::where('is_active', false)->count();
+        $totalProducts = Product::count();
+        $activeProducts = Product::where('is_active', true)->count();
+        $inactiveProducts = Product::where('is_active', false)->count();
         $totalLogs = ScrapingLog::count();
         $recentLogs = ScrapingLog::where('created_at', '>=', now()->subDays(7))->count();
 
@@ -169,8 +168,7 @@ class CleanupCommand extends Command
         $avgProductSize = 2; // KB per product (estimated)
         $avgLogSize = 1; // KB per log (estimated)
         $estimatedSize = ($totalProducts * $avgProductSize) + ($totalLogs * $avgLogSize);
-        
+
         $this->line("- Estimated DB Size: {$estimatedSize} KB");
     }
 }
-

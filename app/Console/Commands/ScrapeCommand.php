@@ -25,7 +25,7 @@ class ScrapeCommand extends Command
     /**
      * The console command description.
      */
-    protected $description = 'Run laptop data scraper for specified platform(s)';
+    protected $description = 'Run Product data scraper for specified platform(s)';
 
     protected DatabaseService $databaseService;
 
@@ -47,7 +47,7 @@ class ScrapeCommand extends Command
         // Set execution time limit
         set_time_limit($timeout);
 
-        $this->info("Starting laptop scraper for platform: {$platform}");
+        $this->info("Starting product scraper for platform: {$platform}");
         Log::info("Scraper command started", [
             'platform' => $platform,
             'force' => $force,
@@ -63,7 +63,6 @@ class ScrapeCommand extends Command
 
             $this->info("Scraping completed successfully!");
             return self::SUCCESS;
-
         } catch (\Exception $e) {
             $this->error("Scraping failed: " . $e->getMessage());
             Log::error("Scraper command failed", [
@@ -81,9 +80,9 @@ class ScrapeCommand extends Command
     protected function scrapeAllPlatforms(bool $force): void
     {
         $platforms = array_keys(config('scraper.platforms', []));
-        
+
         $this->info("Scraping " . count($platforms) . " platforms...");
-        
+
         $progressBar = $this->output->createProgressBar(count($platforms));
         $progressBar->start();
 
@@ -157,7 +156,7 @@ class ScrapeCommand extends Command
     protected function getCategoryUrls(string $platform): array
     {
         $platformConfig = config("scraper.platforms.{$platform}");
-        return $platformConfig['laptop_urls'] ?? [];
+        return $platformConfig['category_urls'] ?? [];
     }
 
     /**
@@ -166,16 +165,15 @@ class ScrapeCommand extends Command
     protected function wasRecentlyScraped(string $platform): bool
     {
         $recentLogs = $this->databaseService->getRecentScrapingLogs(1, $platform);
-        
+
         if ($recentLogs->isEmpty()) {
             return false;
         }
 
         $lastLog = $recentLogs->first();
         $hoursSinceLastScrape = now()->diffInHours($lastLog->created_at);
-        
+
         // Consider recently scraped if less than 12 hours ago
         return $hoursSinceLastScrape < 12;
     }
 }
-

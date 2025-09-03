@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Laptop;
+use App\Models\Product;
 use App\Models\ScrapingLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\Log;
 class DatabaseService
 {
     /**
-     * Save or update laptop data
+     * Save or update Product data
      */
-    public function saveOrUpdateLaptop(array $data): array
+    public function saveOrUpdateProduct(array $data): array
     {
         $result = [
             'action' => 'none',
-            'laptop' => null,
+            'product' => null,
             'changed' => false
         ];
 
@@ -24,35 +24,34 @@ class DatabaseService
             DB::beginTransaction();
 
             // Validate required fields
-            $this->validateLaptopData($data);
+            $this->validateProductData($data);
 
-            // Find existing laptop
-            $existingLaptop = Laptop::findByPlatformAndSku($data['platform'], $data['sku']);
+            // Find existing Product
+            $existingProduct = Product::findByPlatformAndSku($data['platform'], $data['sku']);
 
-            if ($existingLaptop) {
-                // Update existing laptop
-                $changed = $existingLaptop->updateIfChanged($data);
+            if ($existingProduct) {
+                // Update existing Product
+                $changed = $existingProduct->updateIfChanged($data);
                 $result = [
                     'action' => 'updated',
-                    'laptop' => $existingLaptop->fresh(),
+                    'product' => $existingProduct->fresh(),
                     'changed' => $changed
                 ];
             } else {
-                // Create new laptop
-                $laptop = Laptop::create($data);
+                // Create new Product
+                $product = Product::create($data);
                 $result = [
                     'action' => 'created',
-                    'laptop' => $laptop,
+                    'product' => $product,
                     'changed' => true
                 ];
             }
 
             DB::commit();
             return $result;
-
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to save laptop data', [
+            Log::error('Failed to save Product data', [
                 'error' => $e->getMessage(),
                 'data' => $data
             ]);
@@ -61,12 +60,12 @@ class DatabaseService
     }
 
     /**
-     * Validate laptop data before saving
+     * Validate product data before saving
      */
-    protected function validateLaptopData(array $data): void
+    protected function validateProductData(array $data): void
     {
-        $requiredFields = config('scraper.validation.required_fields', ['sku', 'product_name', 'platform']);
-        
+        $requiredFields = config('scraper.validation.required_fields', ['sku', 'title', 'platform']);
+
         foreach ($requiredFields as $field) {
             if (empty($data[$field])) {
                 throw new \InvalidArgumentException("Required field '{$field}' is missing or empty");
@@ -87,7 +86,7 @@ class DatabaseService
 
         // Validate text field lengths
         $maxLengths = [
-            'product_name' => config('scraper.validation.max_product_name_length', 500),
+            'title' => config('scraper.validation.max_title_length', 500),
             'description' => config('scraper.validation.max_description_length', 5000),
             'brand' => config('scraper.validation.max_brand_length', 100),
             'model_name' => config('scraper.validation.max_model_length', 200)
@@ -110,9 +109,9 @@ class DatabaseService
     public function deactivateOldProducts(string $platform, \DateTime $cutoffTime): int
     {
         try {
-            $count = Laptop::where('platform', $platform)
+            $count = Product::where('platform', $platform)
                 ->where('is_active', true)
-                ->where('last_scraped_at', '<', $cutoffTime)
+                ->where('scraped_date', '<', $cutoffTime)
                 ->update(['is_active' => false]);
 
             if ($count > 0) {
@@ -120,7 +119,6 @@ class DatabaseService
             }
 
             return $count;
-
         } catch (\Exception $e) {
             Log::error('Failed to deactivate old products', [
                 'platform' => $platform,
@@ -137,20 +135,19 @@ class DatabaseService
     {
         try {
             $stats = [
-                'total_products' => Laptop::platform($platform)->count(),
-                'active_products' => Laptop::platform($platform)->active()->count(),
-                'inactive_products' => Laptop::platform($platform)->where('is_active', false)->count(),
-                'avg_price' => Laptop::platform($platform)->active()->avg('price'),
-                'min_price' => Laptop::platform($platform)->active()->min('price'),
-                'max_price' => Laptop::platform($platform)->active()->max('price'),
-                'brands_count' => Laptop::platform($platform)->active()->distinct('brand')->count(),
-                'last_scrape' => Laptop::platform($platform)->max('last_scraped_at'),
-                'products_with_rating' => Laptop::platform($platform)->active()->whereNotNull('rating')->count(),
-                'avg_rating' => Laptop::platform($platform)->active()->whereNotNull('rating')->avg('rating')
+                'total_products' => Product::platform($platform)->count(),
+                'active_products' => Product::platform($platform)->active()->count(),
+                'inactive_products' => Product::platform($platform)->where('is_active', false)->count(),
+                'avg_price' => Product::platform($platform)->active()->avg('price'),
+                'min_price' => Product::platform($platform)->active()->min('price'),
+                'max_price' => Product::platform($platform)->active()->max('price'),
+                'brands_count' => Product::platform($platform)->active()->distinct('brand')->count(),
+                'last_scrape' => Product::platform($platform)->max('scraped_date'),
+                'products_with_rating' => Product::platform($platform)->active()->whereNotNull('rating')->count(),
+                'avg_rating' => Product::platform($platform)->active()->whereNotNull('rating')->avg('rating')
             ];
 
             return $stats;
-
         } catch (\Exception $e) {
             Log::error('Failed to get platform stats', [
                 'platform' => $platform,
@@ -182,15 +179,14 @@ class DatabaseService
     {
         try {
             $cutoffDate = now()->subDays($retentionDays);
-            
+
             $count = ScrapingLog::where('created_at', '<', $cutoffDate)->delete();
-            
+
             if ($count > 0) {
                 Log::info("Cleaned up {$count} old scraping logs");
             }
-            
-            return $count;
 
+            return $count;
         } catch (\Exception $e) {
             Log::error('Failed to cleanup old logs', [
                 'error' => $e->getMessage()
@@ -204,7 +200,7 @@ class DatabaseService
      */
     public function getDuplicateProducts(): \Illuminate\Database\Eloquent\Collection
     {
-        return Laptop::select('sku', DB::raw('COUNT(*) as count'), DB::raw('GROUP_CONCAT(platform) as platforms'))
+        return Product::select('sku', DB::raw('COUNT(*) as count'), DB::raw('GROUP_CONCAT(platform) as platforms'))
             ->groupBy('sku')
             ->having('count', '>', 1)
             ->get();
@@ -215,12 +211,12 @@ class DatabaseService
      */
     public function getIncompleteProducts(string $platform = null): \Illuminate\Database\Eloquent\Collection
     {
-        $query = Laptop::where(function ($q) {
+        $query = Product::where(function ($q) {
             $q->whereNull('price')
-              ->orWhereNull('brand')
-              ->orWhereNull('product_name')
-              ->orWhere('product_name', '')
-              ->orWhere('description', '');
+                ->orWhereNull('brand')
+                ->orWhereNull('title')
+                ->orWhere('title', '')
+                ->orWhere('description', '');
         });
 
         if ($platform) {
@@ -233,16 +229,15 @@ class DatabaseService
     /**
      * Update product images
      */
-    public function updateProductImages(int $laptopId, array $imageUrls): bool
+    public function updateProductImages(int $productId, array $imageUrls): bool
     {
         try {
-            $laptop = Laptop::findOrFail($laptopId);
-            $laptop->update(['image_urls' => $imageUrls]);
+            $product = Product::findOrFail($productId);
+            $product->update(['image_urls' => $imageUrls]);
             return true;
-
         } catch (\Exception $e) {
             Log::error('Failed to update product images', [
-                'laptop_id' => $laptopId,
+                'product_id' => $productId,
                 'error' => $e->getMessage()
             ]);
             return false;
@@ -252,15 +247,14 @@ class DatabaseService
     /**
      * Bulk update product status
      */
-    public function bulkUpdateStatus(array $laptopIds, bool $isActive): int
+    public function bulkUpdateStatus(array $productIds, bool $isActive): int
     {
         try {
-            return Laptop::whereIn('id', $laptopIds)
+            return Product::whereIn('id', $productIds)
                 ->update(['is_active' => $isActive]);
-
         } catch (\Exception $e) {
             Log::error('Failed to bulk update product status', [
-                'laptop_ids' => $laptopIds,
+                'product_ids' => $productIds,
                 'is_active' => $isActive,
                 'error' => $e->getMessage()
             ]);
@@ -279,7 +273,7 @@ class DatabaseService
         foreach ($platforms as $platformKey => $platformConfig) {
             $successRate = ScrapingLog::getSuccessRate($platformKey, $days);
             $recentLogs = $this->getRecentScrapingLogs($days, $platformKey);
-            
+
             $performance[$platformKey] = [
                 'name' => $platformConfig['name'],
                 'success_rate' => $successRate,
@@ -295,4 +289,3 @@ class DatabaseService
         return $performance;
     }
 }
-

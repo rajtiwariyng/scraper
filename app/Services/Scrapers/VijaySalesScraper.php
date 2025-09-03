@@ -29,43 +29,81 @@ class VijaySalesScraper extends BaseScraper
      * Extract product URLs from VijaySales category page
      */
     protected function extractProductUrls(Crawler $crawler, string $categoryUrl): array
-{
-    $productUrls = [];
+    {
+        $productUrls = [];
 
-    try {
-        // VijaySales product links selector
-        $selector = '.product-card a.product-card__link';
+        try {
+            // Updated VijaySales product links patterns
+            $selectors = [
+                '.product-item-link',
+                '.product-name a',
+                '.item-title a',
+                '.product-title a',
+                '.product-item .product-item-photo a',
+                '.product-item-info a',
+                '.product-item-details a',
+                '.item-info a',
+                '.product-card a',
+                '.product-wrapper a',
+                'a[href*="/product/"]',
+                'a[href*="/p/"]',
+                '.item a',
+                '.product a',
+                '.listing-item a',
+                '.grid-item a'
+            ];
 
-        $crawler->filter($selector)->each(function (Crawler $node) use (&$productUrls) {
-            $href = $node->attr('href');
-            if ($href) {
-                // Convert relative URLs to absolute
-                if (strpos($href, 'http') !== 0) {
-                    $href = 'https://www.vijaysales.com' . $href;
+            foreach ($selectors as $selector) {
+                $crawler->filter($selector)->each(function (Crawler $node) use (&$productUrls) {
+                    $href = $node->attr('href');
+                    if ($href) {
+                        // Convert relative URLs to absolute
+                        if (strpos($href, 'http') !== 0) {
+                            $href = 'https://www.vijaysales.com' . $href;
+                        }
+
+                        // Only include valid product URLs
+                        if ($this->isValidVijaySalesProductUrl($href)) {
+                            $productUrls[] = $href;
+                        }
+                    }
+                });
+
+                // If we found products with this selector, break
+                if (!empty($productUrls)) {
+                    break;
                 }
-
-                $productUrls[] = $href;
             }
-        });
 
-        // Remove duplicates
-        $productUrls = array_unique($productUrls);
+            // Remove duplicates and limit results
+            $productUrls = array_unique($productUrls);
+            $productUrls = array_slice($productUrls, 0, 50);
 
-        Log::info("Extracted {count} product URLs from VijaySales category page", [
-            'count' => count($productUrls),
-            'category_url' => $categoryUrl
-        ]);
+            Log::info("Extracted {count} product URLs from VijaySales category page", [
+                'count' => count($productUrls),
+                'category_url' => $categoryUrl,
+                'sample_urls' => array_slice($productUrls, 0, 3)
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to extract product URLs from VijaySales", [
+                'error' => $e->getMessage(),
+                'category_url' => $categoryUrl
+            ]);
+        }
 
-    } catch (\Exception $e) {
-        Log::error("Failed to extract product URLs from VijaySales", [
-            'error' => $e->getMessage(),
-            'category_url' => $categoryUrl
-        ]);
+        return $productUrls;
     }
 
-    return $productUrls;
-}
-
+    /**
+     * Check if URL is a valid VijaySales product URL
+     */
+    private function isValidVijaySalesProductUrl(string $url): bool
+    {
+        return strpos($url, 'vijaysales.com') !== false &&
+            (strpos($url, '/product/') !== false ||
+                strpos($url, '/p/') !== false ||
+                preg_match('/\/[a-zA-Z0-9\-]+\.html$/', $url));
+    }
 
     /**
      * Extract product data from VijaySales product page
@@ -83,7 +121,7 @@ class VijaySalesScraper extends BaseScraper
             }
 
             $data['product_url'] = $productUrl;
-            $data['product_name'] = $this->extractProductName($crawler);
+            $data['title'] = $this->extractProductName($crawler);
             $data['description'] = $this->extractDescription($crawler);
 
             $priceData = $this->extractPrices($crawler);
@@ -107,15 +145,14 @@ class VijaySalesScraper extends BaseScraper
             $data['image_urls'] = $this->extractImages($crawler);
             $data['variants'] = $this->extractVariants($crawler);
 
-            $data = DataSanitizer::sanitizeLaptopData($data);
+            $data = DataSanitizer::sanitizeProductData($data);
 
             Log::debug("Extracted VijaySales product data", [
                 'sku' => $data['sku'],
-                'product_name' => $data['product_name'] ?? 'N/A'
+                'title' => $data['title'] ?? 'N/A'
             ]);
 
             return $data;
-
         } catch (\Exception $e) {
             Log::error("Failed to extract VijaySales product data", [
                 'url' => $productUrl,
@@ -316,7 +353,7 @@ class VijaySalesScraper extends BaseScraper
         $title = $this->extractProductName($crawler);
         if ($title) {
             $brands = ['HP', 'Dell', 'Lenovo', 'ASUS', 'Acer', 'Apple', 'MSI', 'Samsung', 'LG', 'Sony', 'Toshiba'];
-            
+
             foreach ($brands as $brand) {
                 if (stripos($title, $brand) !== false) {
                     $data['brand'] = $brand;
@@ -337,24 +374,9 @@ class VijaySalesScraper extends BaseScraper
             if ($cells->count() >= 2) {
                 $label = strtolower($this->cleanText($cells->eq(0)->text()));
                 $value = $this->cleanText($cells->eq(1)->text());
-                
-                if (strpos($label, 'screen') !== false || strpos($label, 'display') !== false) {
-                    $specs['screen_size'] = $value;
-                }
+
                 if (strpos($label, 'ram') !== false || strpos($label, 'memory') !== false) {
                     $specs['ram'] = $value;
-                }
-                if (strpos($label, 'storage') !== false || strpos($label, 'hard') !== false) {
-                    $specs['hard_disk'] = $value;
-                }
-                if (strpos($label, 'processor') !== false || strpos($label, 'cpu') !== false) {
-                    $specs['cpu_model'] = $value;
-                }
-                if (strpos($label, 'graphics') !== false) {
-                    $specs['graphics_card'] = $value;
-                }
-                if (strpos($label, 'operating') !== false || strpos($label, 'os') !== false) {
-                    $specs['operating_system'] = $value;
                 }
             }
         });
@@ -390,4 +412,3 @@ class VijaySalesScraper extends BaseScraper
         return !empty($variants) ? $variants : null;
     }
 }
-
