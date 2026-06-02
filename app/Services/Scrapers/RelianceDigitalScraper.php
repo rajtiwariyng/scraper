@@ -15,18 +15,62 @@ class RelianceDigitalScraper extends BaseScraper
         $this->useJavaScript = true;
         $this->paginationConfig = [
             'type' => 'regular',
-            'max_pages' => 3,
+            'max_pages' => 20,
             'page_param' => 'page_no',
-            'has_next_selector' => '.pagination span[aria-label="Goto Next Page"]',
-            'delay_between_pages' => [3, 6], // Increased delays to avoid rate limiting
+            'delay_between_pages' => [3, 6],
             'retry_failed_pages' => true,
-            'max_retries_per_page' => 2 // OPTIMIZED: Reduced retries
+            'max_retries_per_page' => 2
         ];
     }
 
     public function __construct()
     {
         parent::__construct('reliancedigital');
+    }
+
+    /**
+     * Override pagination because Reliance Digital uses Vue-rendered <span> pagination
+     * (not <a> links), which BrowserService::hasNextPageImproved cannot detect.
+     * All logic is self-contained here — no changes to BaseScraper or BrowserService.
+     */
+    protected function scrapeCategoryWithBrowser(string $categoryUrl): void
+    {
+        $maxPages   = $this->paginationConfig['max_pages'] ?? 20;
+        $delayRange = $this->paginationConfig['delay_between_pages'] ?? [3, 6];
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $url = $this->buildPageUrl($categoryUrl, $page);
+
+            Log::info("Scraping Reliance Digital page {$page}", ['url' => $url]);
+
+            $html = $this->browserService->getPageContent($url, 5);
+
+            if (!$html || strlen($html) < 1000) {
+                Log::warning("Empty content on Reliance Digital page {$page}, stopping", ['url' => $url]);
+                break;
+            }
+
+            $this->processPageContent($html, $url);
+
+            if (!$this->relianceHasNextPage($html, $page)) {
+                Log::info("No further pages after page {$page} for {$categoryUrl}");
+                break;
+            }
+
+            $delay = is_array($delayRange) ? rand($delayRange[0], $delayRange[1]) : (int) $delayRange;
+            sleep($delay);
+        }
+    }
+
+    /**
+     * Check whether the rendered HTML contains a pagination entry for $currentPage + 1.
+     * Reliance Digital renders page numbers as:
+     *   <span aria-label="Goto page number 2" ...>
+     * so this is a simple text search — no DOM parsing needed.
+     */
+    private function relianceHasNextPage(string $html, int $currentPage): bool
+    {
+        return strpos($html, 'Goto page number ' . ($currentPage + 1)) !== false;
     }
 
     /**
@@ -998,7 +1042,7 @@ class RelianceDigitalScraper extends BaseScraper
                 );
 
                 if ($star >= 1 && $star <= 5) {
-                    $ratings["rating_{$star}_star_count"] = $count;
+                    $ratings["rating_{$star}_star_percent"] = $count;
                 }
             }
         );

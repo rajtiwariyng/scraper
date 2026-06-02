@@ -171,7 +171,6 @@ class BrowserService
 
     /**
      * Get all pages content with proper pagination handling
-     * FIXED: Now properly extracts total pages and iterates through all of them
      */
     public function getAllPagesContent(string $baseUrl, array $paginationConfig = []): array
     {
@@ -265,7 +264,6 @@ class BrowserService
 
     /**
      * Extract total number of pages from pagination section
-     * FIXED: Now properly parses Flipkart's pagination HTML
      */
     protected function extractTotalPages(string $content, array $paginationConfig): ?int
     {
@@ -278,7 +276,7 @@ class BrowserService
             // Look for pagination container with page info
             $crawler->filter('div.lvJbLV, nav.iu0OAI, div[class*="pagination"]')->each(function (Crawler $node) use (&$paginationText) {
                 $text = $node->text();
-                if (preg_match('/Page\s+(\d+)\s+of\s+(\d+)/i', $text, $matches)) {
+                if (preg_match('/Page\s+(\d{1,5})\s+of\s+(\d{1,5})\b/i', $text, $matches)) {
                     $paginationText = $matches;
                 }
             });
@@ -320,8 +318,7 @@ class BrowserService
     }
 
     /**
-     * Improved check for next page - uses DOM parsing instead of string search
-     * FIXED: Now properly checks if next page button exists
+     * Check for next page using DOM parsing
      */
     protected function hasNextPageImproved(string $content, string $selector): bool
     {
@@ -507,20 +504,16 @@ class BrowserService
      */
     protected function buildPaginationUrl(string $baseUrl, string $pageParam, int $page): string
     {
+        // Strip any pre-existing page param so stale category URLs don't produce ?page=26&page=2
+        $baseUrl = preg_replace('/([?&])' . preg_quote($pageParam, '/') . '=\d+/', '$1', $baseUrl);
+        $baseUrl = preg_replace('/[?&]$/', '', $baseUrl);   // trim trailing ? or &
+
         if ($page === 1) {
             return $baseUrl;
         }
 
         $separator = strpos($baseUrl, '?') !== false ? '&' : '?';
         return $baseUrl . $separator . $pageParam . '=' . $page;
-    }
-
-    /**
-     * Check if there's a next page (original method - kept for backward compatibility)
-     */
-    protected function hasNextPage(string $content, string $selector): bool
-    {
-        return strpos($content, $selector) !== false;
     }
 
     /**

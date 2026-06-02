@@ -7,6 +7,11 @@ use Symfony\Component\DomCrawler\Crawler;
 
 class AmazonJpScraper extends AmazonScraper
 {
+    public function __construct()
+    {
+        parent::__construct('amazon_jp');
+    }
+
     protected function setupPlatformConfig(): void
     {
         parent::setupPlatformConfig();

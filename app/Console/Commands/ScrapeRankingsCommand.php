@@ -6,13 +6,12 @@ use App\Models\Product;
 use App\Services\Scrapers\AmazonRankingScraper;
 use App\Services\Scrapers\AmazonJpRankingScraper;
 use App\Services\Scrapers\FlipkartRankingScraper;
-use App\Services\Scrapers\VijaySalesRankingScraper;
 use Illuminate\Console\Command;
 
 class ScrapeRankingsCommand extends Command
 {
     protected $signature = 'scraper:rankings
-                        {platform : Platform to scrape (amazon, amazon_jp, flipkart, vijaysales, all)}
+                        {platform : Platform to scrape (amazon, amazon_jp, flipkart, all)}
                         {--keyword-ids=* : Specific keyword IDs to scrape}
                         {--scraper-id= : Scraper batch ID (auto-generated if not provided)}';
 
@@ -30,7 +29,7 @@ class ScrapeRankingsCommand extends Command
 
     protected function scrapeAllRankingPlatformsInParallel(string $scraperId): void
     {
-        $platforms = ['amazon', 'amazon_jp', 'flipkart', 'vijaysales'];
+        $platforms = ['amazon', 'amazon_jp', 'flipkart'];
 
         $this->info("Launching " . count($platforms) . " ranking scrapers in parallel (scraper_id: {$scraperId})...");
 
@@ -105,13 +104,6 @@ class ScrapeRankingsCommand extends Command
                 $scraper = new FlipkartRankingScraper();
                 $scraper->setScraperId($scraperId);
                 $stats['flipkart'] = $scraper->scrapeRankings($keywordIds ?: null);
-            }
-
-            if ($platform === 'vijaysales') {
-                $this->info('Scraping VijaySales rankings...');
-                $scraper = new VijaySalesRankingScraper();
-                $scraper->setScraperId($scraperId);
-                $stats['vijaysales'] = $scraper->scrapeRankings($keywordIds ?: null);
             }
 
             $this->newLine();

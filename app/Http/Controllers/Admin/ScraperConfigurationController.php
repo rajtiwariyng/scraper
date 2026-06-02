@@ -8,17 +8,14 @@ use Illuminate\Http\Request;
 
 class ScraperConfigurationController extends Controller
 {
-    private const PLATFORMS = [
-        'amazon'          => 'Amazon India',
-        'amazon_jp'       => 'Amazon Japan',
-        'flipkart'        => 'Flipkart',
-        'vijaysales'      => 'Vijay Sales',
-        'croma'           => 'Croma',
-        'reliancedigital' => 'Reliance Digital',
-        'blinkit'         => 'Blinkit',
-        'bigbasket'       => 'BigBasket',
-        'zepto'           => 'Zepto',
-    ];
+    // Builds platform list dynamically from config so the admin UI
+    // stays in sync whenever a platform is added or removed.
+    private function platforms(): array
+    {
+        return collect(config('scraper.platforms', []))
+            ->mapWithKeys(fn ($cfg, $key) => [$key => $cfg['name']])
+            ->all();
+    }
 
     public function index(Request $request)
     {
@@ -36,19 +33,21 @@ class ScraperConfigurationController extends Controller
 
         $configs = $query->paginate(50);
 
+        $platforms = $this->platforms();
+
         $stats = [
             'total'    => ScraperConfiguration::count(),
             'active'   => ScraperConfiguration::where('status', 'active')->count(),
             'inactive' => ScraperConfiguration::where('status', 'inactive')->count(),
         ];
 
-        return view('admin.scraper-config.index', compact('configs', 'stats', 'filterPlatform', 'filterStatus'));
+        return view('admin.scraper-config.index', compact('configs', 'stats', 'filterPlatform', 'filterStatus', 'platforms'));
     }
 
     public function create()
     {
         return view('admin.scraper-config.create', [
-            'platforms' => self::PLATFORMS,
+            'platforms' => $this->platforms(),
             'config'    => null,
         ]);
     }
@@ -56,7 +55,7 @@ class ScraperConfigurationController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'platform'     => 'required|in:' . implode(',', array_keys(self::PLATFORMS)),
+            'platform'     => 'required|in:' . implode(',', array_keys($this->platforms())),
             'category_url' => 'required|url|max:2000',
             'category'     => 'nullable|string|max:100',
             'status'       => 'required|in:active,inactive',
@@ -88,7 +87,7 @@ class ScraperConfigurationController extends Controller
     public function edit(ScraperConfiguration $scraperConfig)
     {
         return view('admin.scraper-config.create', [
-            'platforms' => self::PLATFORMS,
+            'platforms' => $this->platforms(),
             'config'    => $scraperConfig,
         ]);
     }
@@ -96,7 +95,7 @@ class ScraperConfigurationController extends Controller
     public function update(Request $request, ScraperConfiguration $scraperConfig)
     {
         $request->validate([
-            'platform'     => 'required|in:' . implode(',', array_keys(self::PLATFORMS)),
+            'platform'     => 'required|in:' . implode(',', array_keys($this->platforms())),
             'category_url' => 'required|url|max:2000',
             'category'     => 'nullable|string|max:100',
             'status'       => 'required|in:active,inactive',

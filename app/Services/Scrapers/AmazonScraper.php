@@ -14,19 +14,19 @@ class AmazonScraper extends BaseScraper
         $this->useJavaScript = false; // Amazon works with regular HTTP requests
         $this->paginationConfig = [
             'type' => 'regular',
-            'max_pages' => 250, // Increased from 100 to handle more pages
+            'max_pages' => 50,
             'page_param' => 'page',
             'has_next_selector' => '.a-pagination .a-last:not(.a-disabled)',
-            'max_consecutive_errors' => 500, // Allow more errors before stopping
-            'delay_between_pages' => [3, 7], // Longer delays to avoid rate limiting
+            'max_consecutive_errors' => 250,
+            'delay_between_pages' => [3, 7],
             'retry_failed_pages' => true,
             'max_retries_per_page' => 3
         ];
     }
 
-    public function __construct()
+    public function __construct(string $platform = 'amazon')
     {
-        parent::__construct('amazon');
+        parent::__construct($platform);
     }
 
     /**

@@ -9,7 +9,7 @@ class AmazonSaRankingScraper extends AmazonRankingScraper
     protected function getHeaders(): array
     {
         $headers = parent::getHeaders();
-        $headers['Accept-Language'] = 'ar-SA,ar;q=0.9,en;q=0.8';
+        $headers['Accept-Language'] = 'en-US,en;q=0.9';
         return $headers;
     }
 
@@ -23,13 +23,4 @@ class AmazonSaRankingScraper extends AmazonRankingScraper
         return 'https://www.amazon.sa/s?' . http_build_query($params);
     }
 
-    public function getPlatform(): string
-    {
-        return $this->platform;
-    }
-
-    public function testBuildSearchUrl(string $keyword, int $page): string
-    {
-        return $this->buildSearchUrl($keyword, $page);
-    }
 }

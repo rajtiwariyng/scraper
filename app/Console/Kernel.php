@@ -26,10 +26,7 @@ class Kernel extends ConsoleKernel
             ['croma',           3, '02:00'],   // Wednesday
             ['vijaysales',      4, '02:00'],   // Thursday
             ['reliancedigital', 5, '02:00'],   // Friday
-            ['bigbasket',       6, '02:00'],   // Saturday morning
-            ['blinkit',         6, '14:00'],   // Saturday afternoon
-            ['meesho',          0, '02:00'],   // Sunday morning
-            ['zepto',           0, '14:00'],   // Sunday afternoon
+            ['zepto',           6, '02:00'],   // Saturday
         ];
 
         foreach ($platformSlots as [$platform, $dayOfWeek, $time]) {

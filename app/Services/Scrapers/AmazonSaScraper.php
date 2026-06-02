@@ -16,7 +16,7 @@ class AmazonSaScraper extends AmazonScraper
     {
         parent::setupPlatformConfig();
         $this->platform = 'amazon_sa';
-        $this->defaultHeaders = ['Accept-Language' => 'ar-SA,ar;q=0.9,en;q=0.8'];
+        $this->defaultHeaders = ['Accept-Language' => 'en-US,en;q=0.9'];
     }
 
     protected function extractProductUrls(Crawler $crawler, string $categoryUrl): array
@@ -61,13 +61,4 @@ class AmazonSaScraper extends AmazonScraper
         return $productUrls;
     }
 
-    public function getPlatform(): string
-    {
-        return $this->platform;
-    }
-
-    public function testExtractProductUrls(Crawler $crawler, string $categoryUrl): array
-    {
-        return $this->extractProductUrls($crawler, $categoryUrl);
-    }
 }

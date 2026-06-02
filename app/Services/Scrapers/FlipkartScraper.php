@@ -12,9 +12,7 @@ class FlipkartScraper extends BaseScraper
     protected function setupPlatformConfig(): void
     {
         $this->platform = 'flipkart';
-        $this->useJavaScript = true; // Use Browsershot as primary mechanism
-        
-        // FIXED: Improved pagination configuration
+        $this->useJavaScript = true;
         $this->paginationConfig = [
             'type' => 'regular',
             'max_pages' => 100,  // Will be overridden by actual page count detected
@@ -48,9 +46,9 @@ class FlipkartScraper extends BaseScraper
             ]);
 
             foreach ($categoryUrls as $categoryUrl) {
-                // Use Browsershot directly as primary mechanism
-                // FIXED: This now properly handles all pages
-                $this->scrapeCategoryWithBrowser($categoryUrl);
+                // Fetch pages one by one (page=1, page=2, ...) and process immediately.
+                // No need to pre-fetch all pages — Flipkart pagination is just ?page=N.
+                $this->scrapeCategoryWithPagination($categoryUrl);
 
                 if ($this->isExecutionTimeLimitReached()) {
                     break;
@@ -70,69 +68,9 @@ class FlipkartScraper extends BaseScraper
      */
     protected function randomDelay(): void
     {
-        $delay = rand(5, 10);
+        $delay = rand(2, 4);
         Log::debug("Random delay applied for Flipkart", ['delay_seconds' => $delay]);
         sleep($delay);
-    }
-
-    /**
-     * Try HTTP scraping with enhanced anti-blocking measures
-     */
-    private function tryHttpScraping(string $categoryUrl): bool
-    {
-        $userAgentRotator = new \App\Services\UserAgentRotator();
-        $attempts = 0;
-        $maxAttempts = 3;
-
-        while ($attempts < $maxAttempts) {
-            try {
-                // Get randomized headers for this attempt
-                $this->defaultHeaders = $userAgentRotator->getBrowserSessionHeaders();
-
-                Log::info("Attempting HTTP scraping for Flipkart", [
-                    'attempt' => $attempts + 1,
-                    'url' => $categoryUrl,
-                    'user_agent' => substr($this->defaultHeaders['User-Agent'], 0, 50) . '...'
-                ]);
-
-                // Add random delay before request
-                sleep(rand(3, 8));
-
-                $html = $this->fetchPage($categoryUrl);
-
-                if ($html && strlen($html) > 1000) {
-                    // Process the page if we got valid content
-                    $productCount = $this->processPageContent($html, $categoryUrl);
-
-                    if ($productCount > 0) {
-                        Log::info("HTTP scraping successful for Flipkart", [
-                            'products_found' => $productCount,
-                            'attempt' => $attempts + 1
-                        ]);
-
-                        // Continue with pagination if first page was successful
-                        $this->scrapeCategoryWithPagination($categoryUrl);
-                        return true;
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::warning("HTTP attempt failed for Flipkart", [
-                    'attempt' => $attempts + 1,
-                    'error' => $e->getMessage()
-                ]);
-            }
-
-            $attempts++;
-
-            // Exponential backoff with randomization
-            if ($attempts < $maxAttempts) {
-                $delay = pow(2, $attempts) * rand(3, 7);
-                Log::info("Waiting {$delay} seconds before next attempt");
-                sleep($delay);
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -291,7 +229,8 @@ class FlipkartScraper extends BaseScraper
     private function extractProductName(Crawler $crawler): ?string
     {
         $selectors = [
-            '.v1zwn21j.v1zwn26',
+            '.v1zwn21l.v1zwn26',           // new Flipkart UI (h1 title)
+            '.v1zwn21j.v1zwn26',           // older variant
             'div.v1zwn21j.v1zwn26',
             '[class*="v1zwn26"]',
         ];
@@ -357,15 +296,14 @@ class FlipkartScraper extends BaseScraper
     {
         $prices = ["price" => null, "sale_price" => null];
 
-        /*
-        * SALE PRICE
-        */
+        // Sale price: v1zwn21l v1zwn20 (current Flipkart UI confirmed on Canon printer + Realme phone)
+        // Ad panel uses v1zwn21l v1zwn2d (different second class) so no collision
         $salePriceSelectors = [
-            '.v1zwn21k.v1zwn20',                    // new Flipkart UI
+            '.v1zwn21l.v1zwn20',                    // new Flipkart UI (confirmed)
+            '.v1zwn21k.v1zwn20',                    // alternate new UI
             '[class*="v1zwn21k"][class*="v1zwn20"]',
             '.Nx9bqj.CxhGGd',                      // older UI
             '.hZ3P6w.bnqy13',
-            'div[class*="v1zwn21k"][class*="v1zwn20"]',
             'span[class*="Nx9bqj"]'
         ];
 
@@ -383,15 +321,11 @@ class FlipkartScraper extends BaseScraper
             }
         }
 
-        /*
-        * ORIGINAL PRICE (MRP)
-        */
+        // MRP: v1zwn21m v1zwn21 with line-through (confirmed on Canon printer)
         $mrpPriceSelectors = [
-            '.v1zwn21l.v1zwn21',                      // new Flipkart UI
-            '[class*="v1zwn21l"][style*="line-through"]',
-            'div[style*="line-through"]',
-            'span[style*="line-through"]',
-            '.hl05eU .yRaY8j',                        // older UI
+            '.v1zwn21m.v1zwn21',   // new Flipkart UI (confirmed)
+            '.v1zwn21l.v1zwn21',   // alternate new UI
+            '.hl05eU .yRaY8j',     // older UI
             '.kRYCnD.yHYOcc'
         ];
 
@@ -405,6 +339,21 @@ class FlipkartScraper extends BaseScraper
                 if ($price) {
                     $prices["price"] = $price;
                     break;
+                }
+            }
+        }
+
+        // Fallback: find strikethrough element NOT inside an <a href="...">.
+        // The main product price <a> has no href; ad panel items have href pointing to other products.
+        if (!$prices["price"]) {
+            $mrpNode = $crawler->filterXPath(
+                '//*[contains(@style,"line-through") and not(ancestor::a[@href]) and normalize-space(text())!=""]'
+            )->first();
+
+            if ($mrpNode->count()) {
+                $price = $this->extractPrice($this->cleanText($mrpNode->text()));
+                if ($price) {
+                    $prices["price"] = $price;
                 }
             }
         }
@@ -428,9 +377,10 @@ class FlipkartScraper extends BaseScraper
         $offers = [];
 
         $selectors = [
-            '.v1zwn21z.v1zwn20',          // new Flipkart discount %
+            '.v1zwn220.v1zwn20',          // new Flipkart UI discount % (font-m, main product)
+            '.v1zwn21z.v1zwn20',          // older variant
             '[class*="v1zwn21z"][class*="v1zwn20"]',
-            'div[class*="v1zwn21"][class*="20"]', // fallback
+            'div[class*="v1zwn21"][class*="20"]',
         ];
 
         foreach ($selectors as $selector) {
@@ -489,9 +439,6 @@ class FlipkartScraper extends BaseScraper
     {
         $data = ['rating' => null, 'review_count' => 0];
 
-        /*
-        * Rating selectors
-        */
         $ratingSelectors = [
             '.css-146c3p1',                     // new Flipkart rating
             '.asbjxx .css-146c3p1',
@@ -513,9 +460,6 @@ class FlipkartScraper extends BaseScraper
             }
         }
 
-        /*
-        * Review selectors
-        */
         $reviewSelectors = [
             'a[href*="ratings-reviews"] .css-146c3p1',
             'a[href*="ratings-reviews"]',
@@ -614,12 +558,15 @@ class FlipkartScraper extends BaseScraper
     {
         $variants = [];
 
-        // Only links inside variant blocks
+        // Only links inside variant blocks; exclude ad links which contain fm= parameter
         $crawler->filter('div[data-observerid] a[href*="/p/itm"]')
             ->each(function (Crawler $node) use (&$variants) {
 
                 $href = $node->attr('href');
                 if (!$href) return;
+
+                // Ad carousel links contain fm= (base64 encoded "advertisement"); skip them
+                if (strpos($href, 'fm=') !== false) return;
 
                 if (preg_match('#/p/(itm[a-zA-Z0-9]+)#', $href, $match)) {
                     $variants[] = $match[1];
@@ -633,12 +580,11 @@ class FlipkartScraper extends BaseScraper
 
 
 
-    // Product Attributes
     private function extractBrand(Crawler $crawler): ?string
     {
         $brand = null;
 
-        // ✅ 1. Spec section se
+        // 1. Try spec section
         $crawler->filter('.grid-formation-dynamic')->each(function (Crawler $node) use (&$brand) {
 
             if ($brand !== null) return;
@@ -654,7 +600,7 @@ class FlipkartScraper extends BaseScraper
             }
         });
 
-        // ✅ 2. Title se (allowed brands match)
+        // 2. Match known brands from product title
         if (!$brand) {
 
             $titleNode = $crawler->filter('h1')->first();
@@ -676,7 +622,7 @@ class FlipkartScraper extends BaseScraper
                     }
                 }
 
-                // ✅ 3. FINAL fallback → first word
+                // 3. Last resort: use first word of title
                 if (!$brand && !empty($words[0])) {
                     $brand = ucfirst($words[0]);
                 }
@@ -709,21 +655,6 @@ class FlipkartScraper extends BaseScraper
                 }
             }
         });
-
-        // fallback
-        if (!$size) {
-
-            $titleNode = $crawler->filter('h1')->first();
-
-            if ($titleNode->count()) {
-
-                $title = strtoupper(trim($titleNode->text()));
-
-                if (preg_match('/\b(XS|S|M|L|XL|XXL|XXXL)\b/', $title, $matches)) {
-                    $size = $matches[1];
-                }
-            }
-        }
 
         return $size;
     }
@@ -787,7 +718,7 @@ class FlipkartScraper extends BaseScraper
 
             $label = strtolower(trim($labelNode->text()));
 
-            if ($label === 'Model Name') {
+            if ($label === 'model name') {
 
                 // value
                 $valueNode = $row->filter('.v1zwn21k.v1zwn26')->first();
@@ -806,20 +737,16 @@ class FlipkartScraper extends BaseScraper
     {
         $colour = null;
 
-        // ✅ 1. Spec section (Flipkart new UI)
         $crawler->filter('.grid-formation-dynamic')->each(function (Crawler $node) use (&$colour) {
 
             if ($colour !== null) return;
 
-            // label = Color / Colour
             $labelNode = $node->filter('.v1zwn21l')->first();
             if (!$labelNode->count()) return;
 
             $label = strtolower(trim($labelNode->text()));
 
-            if ($label === 'Color' || $label === 'colour') {
-
-                // value = Black
+            if ($label === 'color' || $label === 'colour') {
                 $valueNode = $node->filter('.v1zwn21k')->first();
                 if ($valueNode->count()) {
                     $colour = trim($valueNode->text());
@@ -854,7 +781,7 @@ class FlipkartScraper extends BaseScraper
 
             $label = strtolower(trim($labelNode->text()));
 
-            if (strpos($label, 'Weight') !== false) {
+            if (strpos($label, 'weight') !== false) {
                 $weight = trim($valueNode->text());
             }
         });
@@ -940,51 +867,28 @@ class FlipkartScraper extends BaseScraper
     {
         $videoUrls = [];
 
-        /*
-        |--------------------------------------------------------------------------
-        | 1. Normal video / iframe (fallback – old layouts)
-        |--------------------------------------------------------------------------
-        */
+        // Direct video / iframe embeds
         $crawler->filter("video source, video, iframe[src*='youtube'], iframe[src*='vimeo']")
             ->each(function (Crawler $node) use (&$videoUrls) {
-
                 $src = $node->attr("src");
                 if ($src) {
                     $videoUrls[] = $src;
                 }
             });
 
-        /*
-        |--------------------------------------------------------------------------
-        | 2. NEW Flipkart layout – detect youtube thumbnails
-        |--------------------------------------------------------------------------
-        | Pattern:
-        | https://img.youtube.com/vi/VIDEO_ID/0.jpg
-        */
+        // New Flipkart layout: YouTube thumbnails (https://img.youtube.com/vi/VIDEO_ID/0.jpg)
         $crawler->filter('img[src*="img.youtube.com/vi/"]')
             ->each(function (Crawler $img) use (&$videoUrls) {
-
                 $src = $img->attr('src');
-
                 if (!$src) return;
 
                 if (preg_match('~/vi/([^/]+)/~', $src, $m)) {
-
                     $videoId = $m[1];
-
-                    // Convert to actual video URL
                     $videoUrls[] = "https://www.youtube.com/watch?v=" . $videoId;
-
-                    // optional embed version
                     $videoUrls[] = "https://www.youtube.com/embed/" . $videoId;
                 }
             });
 
-        /*
-        |--------------------------------------------------------------------------
-        | 3. Remove duplicates
-        |--------------------------------------------------------------------------
-        */
         $videoUrls = array_values(array_unique($videoUrls));
 
         return !empty($videoUrls) ? $videoUrls : null;
@@ -995,37 +899,17 @@ class FlipkartScraper extends BaseScraper
     {
         $categories = [];
 
-        /*
-        |--------------------------------------------------------------------------
-        | Breadcrumb links in new Flipkart layout
-        |--------------------------------------------------------------------------
-        | Container stable hai, classes random hoti hain
-        | Isliye anchor based detection use karenge
-        */
+        // Breadcrumb anchors — container class is stable, inner classes vary
         $crawler->filter('div.faikzn a')->each(function (Crawler $node) use (&$categories) {
-
             $text = trim($node->text());
-
             if ($text !== '') {
                 $categories[] = $text;
             }
         });
 
-        /*
-        |--------------------------------------------------------------------------
-        | Remove "Home"
-        |--------------------------------------------------------------------------
-        */
         if (!empty($categories) && strtolower($categories[0]) === 'home') {
             array_shift($categories);
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Last element product category hota hai, remove nahi karna
-        | (Old logic me last remove karte the — ab nahi)
-        |--------------------------------------------------------------------------
-        */
 
         return !empty($categories) ? implode(', ', $categories) : null;
     }
@@ -1033,19 +917,31 @@ class FlipkartScraper extends BaseScraper
 
     private function extractSellerName(Crawler $crawler): ?string
     {
-        // Find node containing "Fulfilled by"
+        // Phone/electronics pages: "Sold by RetailerName | Fulfilled by Flipkart"
         $node = $crawler->filterXPath(
-            "//div[contains(text(),'Fulfilled by')]"
+            "//*[contains(.,'Sold by') or contains(.,'sold by')]"
+        )->first();
+
+        if ($node->count()) {
+            $text = trim($node->text());
+            if (preg_match('/Sold by\s+(.+?)(?:\s*[|]\s*|\s*Fulfilled\s+by|\s*$)/i', $text, $match)) {
+                $seller = $this->cleanText(trim($match[1]));
+                if ($seller) {
+                    return $seller;
+                }
+            }
+        }
+
+        // Fallback: "Fulfilled by [Seller]" (some categories only show this)
+        $node = $crawler->filterXPath(
+            "//*[contains(text(),'Fulfilled by')]"
         )->first();
 
         if (!$node->count()) {
             return null;
         }
 
-        $text = trim($node->text());
-
-        // Remove "Fulfilled by"
-        $text = preg_replace('/Fulfilled by/i', '', $text);
+        $text = preg_replace('/Fulfilled by/i', '', trim($node->text()));
 
         return $text ? $this->cleanText(trim($text)) : null;
     }
@@ -1224,7 +1120,7 @@ class FlipkartScraper extends BaseScraper
             'rating_1_star_percent' => null,
         ];
 
-        // Flipkart rating counts inside ul.lpfPv5
+        // Older Flipkart UI: ul.lpfPv5 li .MDKzf4
         $nodes = $crawler->filter('ul.lpfPv5 li .MDKzf4');
 
         if ($nodes->count() >= 5) {
@@ -1233,18 +1129,37 @@ class FlipkartScraper extends BaseScraper
 
             $nodes->each(function (Crawler $node) use (&$values) {
                 $text = trim($node->text());
-                // Clean number (remove comma)
                 $num = intval(str_replace(',', '', $text));
                 $values[] = $num;
             });
 
             if (count($values) >= 5) {
-                // Already in 5★ → 1★ order
                 $ratings['rating_5_star_percent'] = $values[0];
                 $ratings['rating_4_star_percent'] = $values[1];
                 $ratings['rating_3_star_percent'] = $values[2];
                 $ratings['rating_2_star_percent'] = $values[3];
                 $ratings['rating_1_star_percent'] = $values[4];
+            }
+        }
+
+        // New Flipkart UI: extract from breakdown text like "5★(6) 4★(2)..." if available
+        if (!$ratings['rating_5_star_percent']) {
+            $reviewLink = $crawler->filterXPath('//a[contains(@href,"ratings-reviews")]')->first();
+            if ($reviewLink->count()) {
+                $text = $reviewLink->text();
+                if (preg_match_all('/(\d)\s*[★*]\s*\(?([\d,]+)\)?/', $text, $matches, PREG_SET_ORDER)) {
+                    $total = array_sum(array_map(fn($m) => (int)str_replace(',', '', $m[2]), $matches));
+                    if ($total > 0) {
+                        foreach ($matches as $m) {
+                            $star = (int)$m[1];
+                            $count = (int)str_replace(',', '', $m[2]);
+                            $key = "rating_{$star}_star_percent";
+                            if (isset($ratings[$key])) {
+                                $ratings[$key] = (int)round($count / $total * 100);
+                            }
+                        }
+                    }
+                }
             }
         }
 

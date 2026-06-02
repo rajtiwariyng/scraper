@@ -58,8 +58,8 @@
             <div class="col-md-4">
                 <select name="platform" class="form-select">
                     <option value="">All Platforms</option>
-                    @foreach(['amazon','amazon_jp','flipkart','vijaysales','croma','reliancedigital','blinkit','bigbasket','zepto'] as $p)
-                        <option value="{{ $p }}" {{ $filterPlatform == $p ? 'selected' : '' }}>{{ ucfirst($p) }}</option>
+                    @foreach($platforms as $key => $name)
+                        <option value="{{ $key }}" {{ $filterPlatform == $key ? 'selected' : '' }}>{{ $name }}</option>
                     @endforeach
                 </select>
             </div>

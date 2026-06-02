@@ -59,25 +59,17 @@ return [
             'base_url' => 'https://www.amazon.sa',
             'category_urls' => [
                 // Sleepwell mattresses
-                'https://www.amazon.sa/s?k=mattress&rh=p_89%3ASleepwell',
+                'https://www.amazon.sa/s?k=sleepwell&rh=n%3A16856304031&ref=nb_sb_noss',
                 // Kurlon mattresses
-                'https://www.amazon.sa/s?k=mattress&rh=p_89%3AKurlon',
+                'https://www.amazon.sa/s?k=Kurlon&crid=2OK8X428U41I&sprefix=kurlon%2Caps%2C221&ref=nb_sb_noss_2',
             ],
         ],
         'flipkart' => [
             'name' => 'Flipkart',
             'base_url' => 'https://www.flipkart.com',
-            // Cookies attached to every Browsershot request for this platform.
-            // Map of cookie name => value. Sent as a single Cookie header.
-            // The pincode controls which warehouse Flipkart shows pricing for.
             'cookies' => [
                 'deliveryPincode' => '110001',
             ],
-            // Smart wait: BrowserService::getPageContent returns as soon as
-            // any of these selectors resolves, instead of paying a fixed delay.
-            //   h1         — present on PDPs (product title)
-            //   [data-id]  — present on listing cards
-            // Comma-separated; Puppeteer's waitForSelector resolves on first match.
             'wait_for_selector' => 'h1, [data-id]',
             'wait_for_selector_timeout' => 8000,
             'category_urls' => [
@@ -93,12 +85,8 @@ return [
             'name' => 'VijaySales',
             'base_url' => 'https://www.vijaysales.com',
             'category_urls' => [
-                'https://www.vijaysales.com/c/printers',
-                //Mobile,
-                'https://www.vijaysales.com/c/smartphones?brand=realme',
                 'https://www.vijaysales.com/c/smartphones',
-                'https://www.vijaysales.com/c/mobiles-tablets-and-accessories',
-                'https://www.vijaysales.com/search-listing?q=mobile',
+                'https://www.vijaysales.com/c/printers',
 
             ]
         ],
@@ -106,104 +94,25 @@ return [
             'name' => 'Reliance Digital',
             'base_url' => 'https://www.reliancedigital.in',
             'category_urls' => [
-                 'https://www.reliancedigital.in/collection/hp-printers?internal_source=navigation&page_no=1&page_size=36&page_type=number',
-                 'https://www.reliancedigital.in/collection/canon-printers?internal_source=navigation&page_no=1&page_size=24&page_type=number',
-                 'https://www.reliancedigital.in/collection/brother-printers',
+                'https://www.reliancedigital.in/collection/hp-printers',
+                'https://www.reliancedigital.in/collection/canon-printers',
+                'https://www.reliancedigital.in/collection/brother-printers',
                 'https://www.reliancedigital.in/collection/epson-printers',
-                //mobile
-                'https://www.reliancedigital.in/collection/samsung-mobiles?is_available=true&sort_on=latest&page_no=1&page_size=480&page_type=number',
-                'https://www.reliancedigital.in/collection/oppo-mobiles?is_available=true&sort_on=latest&page_no=1&page_size=240&page_type=number',
-                'https://www.reliancedigital.in/collection/realme-mobiles?is_available=true&sort_on=latest&page_no=1&page_size=240&page_type=number',
-                'https://www.reliancedigital.in/collection/redmi-mobiles?is_available=true&sort_on=latest&page_no=1&page_size=240&page_type=number',
-                'https://www.reliancedigital.in/collection/vivo-mobiles?is_available=true&sort_on=latest&page_no=1&page_size=240&page_type=number',
-                'https://www.reliancedigital.in/collection/motorola-mobiles?is_available=true&sort_on=latest&page_no=1&page_size=24&page_type=number',
+                'https://www.reliancedigital.in/collection/samsung-mobiles',
+                'https://www.reliancedigital.in/collection/vivo-mobiles',
+                'https://www.reliancedigital.in/collection/oppo-mobiles',
+                'https://www.reliancedigital.in/collection/motorola-mobiles',
+                'https://www.reliancedigital.in/collection/redmi-mobiles',
+                'https://www.reliancedigital.in/collection/realme-mobiles',
             ]
         ],
         'croma' => [
             'name' => 'Croma',
             'base_url' => 'https://www.croma.com',
             'category_urls' => [
-                'https://www.croma.com/computers-tablets/printers/c/31?q=%3Arelevance%3ASG-ManufacturerDetails-Brand%3ACanon',
-                'https://www.croma.com/computers-tablets/printers/c/31?q=%3Arelevance%3ASG-ManufacturerDetails-Brand%3AEpson',
-                'https://www.croma.com/computers-tablets/printers/c/31?q=%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AHP%3Aprice_group%3A10%2C001+-+20%2C000%3Aprice_group%3A5%2C001+-+10%2C000%3Aprice_group%3A20%2C001+-+30%2C000%3Aprice_group%3A1%2C001+-+1%2C500%3Aprice_group%3A50%2C001+-+60%2C000',
-                'https://www.croma.com/computers-tablets/printers/c/31?q=%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AHP%3Aprice_group%3A10%2C001+-+20%2C000%3Aprice_group%3A5%2C001+-+10%2C000%3Aprice_group%3A20%2C001+-+30%2C000%3Aprice_group%3A1%2C001+-+1%2C500%3Aprice_group%3A50%2C001+-+60%2C000',
-                //mobile
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ASamsung&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ASamsung&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3ALatestArrival%3ASG-ManufacturerDetails-Brand%3ASamsung&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3AtopRated%3ASG-ManufacturerDetails-Brand%3ASamsung&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ASamsung&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Adiscount-desc%3ASG-ManufacturerDetails-Brand%3ASamsung&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Adiscount-desc%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3ALatestArrival%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3AtopRated%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AVivo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ARealme%3Aprice_group%3A30%2C001+-+40%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ARealme%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ARealme%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ARealme%3Aprice_group%3A10%2C001+-+20%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AOppo%3Aprice_group%3A5%2C001+-+10%2C000%3Aprice_group%3A40%2C001+-+50%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AOppo%3Aprice_group%3A30%2C001+-+40%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AOppo%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AOppo%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AOppo%3Aprice_group%3A10%2C001+-+20%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Adiscount-desc%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3ALatestArrival%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3AtopRated%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ARealme&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Adiscount-desc%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3ALatestArrival%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3AtopRated%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AOppo&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3AXiaomi&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AVivo%3Aprice_group%3A30%2C001+-+40%2C000%3Aprice_group%3A40%2C001+-+50%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AVivo%3Aprice_group%3A30%2C001+-+40%2C000%3Aprice_group%3A40%2C001+-+50%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AVivo%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AVivo%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3AVivo%3Aprice_group%3A10%2C001+-+20%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3AVivo%3Aprice_group%3A10%2C001+-+20%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A60%2C001+-+70%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A70%2C001+-+80%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A1%2C00%2C001+-+2%2C00%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A1%2C00%2C001+-+2%2C00%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A40%2C001+-+50%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A20%2C001+-+30%2C000%3Aprice_group%3A30%2C001+-+40%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A20%2C001+-+30%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-asc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A10%2C001+-+20%2C000&text=mobile',
-                'https://www.croma.com/searchB?q=mobile%3Aprice-desc%3ASG-ManufacturerDetails-Brand%3ASamsung%3Aprice_group%3A10%2C001+-+20%2C000&text=mobile',
+                'https://www.croma.com/computers-tablets/printers/c/31',
+                'https://www.croma.com/searchB?q=mobile%3Arelevance%3ASG-ManufacturerDetails-Brand%3ASamsung%3ASG-ManufacturerDetails-Brand%3AVivo%3ASG-ManufacturerDetails-Brand%3ARealme%3ASG-ManufacturerDetails-Brand%3AOppo%3ASG-ManufacturerDetails-Brand%3ARedmi%3ASG-ManufacturerDetails-Brand%3AXiaomi&text=mobile',
 
-
-            ]
-        ],
-        'blinkit' => [
-            'name' => 'Blinkit',
-            'base_url' => 'https://blinkit.com',
-            'category_urls' => [
-                'https://blinkit.com/s/?q=printer',
-            ]
-        ],
-        'bigbasket' => [
-            'name' => 'Bigbasket',
-            'base_url' => 'https://www.bigbasket.com',
-            'category_urls' => [
-                'https://www.bigbasket.com/pc/baby-care/diapers-wipes/?nc=nb',
-            ]
-        ],
-        'meesho' => [
-            'name' => 'Meesho',
-            'base_url' => 'https://www.meesho.com',
-            'category_urls' => [
-                'https://www.meesho.com/search?q=printer&searchType=manual&searchIdentifier=text_search',
             ]
         ],
         'zepto' => [

@@ -5,104 +5,102 @@ namespace App\Services\Scrapers;
 use App\Services\DataSanitizer;
 use Symfony\Component\DomCrawler\Crawler;
 use Illuminate\Support\Facades\Log;
-use Spatie\Browsershot\Browsershot;
+use Symfony\Component\Process\Process;
 
 class CromaScraper extends BaseScraper
 {
     protected function setupPlatformConfig(): void
     {
         $this->platform = 'croma';
-        $this->useJavaScript = true; // Croma requires JavaScript
+        $this->useJavaScript = true;
         $this->paginationConfig = [
-            'type' => 'regular',
-            'max_pages' => 100,
-            'page_param' => 'page',
-            'has_next_selector' => '.pagination .next:not(.disabled)',
-            'delay_between_pages' => [3, 6], // Increased delays
+            'type' => 'view_more',
+            'max_view_more_clicks' => 20,
+            'delay_between_pages' => [3, 6],
             'retry_failed_pages' => true,
             'max_retries_per_page' => 3
         ];
     }
 
-    public function __construct()
+    /**
+     * Override base browser scraping to handle Croma's "View More" button pattern.
+     */
+    protected function scrapeCategoryWithBrowser(string $categoryUrl): void
     {
-        parent::__construct('croma');
+        try {
+            $html = $this->fetchAllProductsWithViewMore($categoryUrl);
+
+            if ($html) {
+                $this->processPageContent($html, $categoryUrl);
+            }
+        } catch (\Exception $e) {
+            $this->handleError("Failed to scrape Croma category: {$categoryUrl}", $e);
+        }
     }
 
     /**
-     * Fetch page with JavaScript rendering and enhanced headers
+     * Load a Croma listing page, then click "View More" until all products are visible.
      */
-    protected function fetchPageWithBrowsershot(string $url): ?string
+    private function fetchAllProductsWithViewMore(string $url): ?string
     {
+        $maxClicks  = $this->paginationConfig['max_view_more_clicks'] ?? 20;
+        $scriptPath = base_path('scripts/croma-view-more.cjs');
+        $nodeBin    = config('scraper.node_binary', 'node');
+
+        // Ensure System32 is in PATH so Node's child-process calls (taskkill etc.)
+        // resolve correctly under XAMPP/Apache's stripped environment.
+        if (PHP_OS_FAMILY === 'Windows') {
+            $currentPath = getenv('PATH') ?: '';
+            if (stripos($currentPath, 'Windows\\System32') === false) {
+                putenv('PATH=' . $currentPath . ';C:\\Windows\\System32;C:\\Windows\\SysWOW64');
+            }
+        }
+
         try {
-            Log::debug("Fetching Croma page with JavaScript", ['url' => $url]);
-
-            $html = Browsershot::url($url)
-                ->userAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-                ->setExtraHttpHeaders([
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language' => 'en-US,en;q=0.9',
-                    'Accept-Encoding' => 'gzip, deflate, br',
-                    'Connection' => 'keep-alive',
-                    'Upgrade-Insecure-Requests' => '1',
-                    'Sec-Fetch-Dest' => 'document',
-                    'Sec-Fetch-Mode' => 'navigate',
-                    'Sec-Fetch-Site' => 'none',
-                ])
-                ->waitUntilNetworkIdle()
-                ->timeout(60)
-                ->bodyHtml();
-
-            $contentLength = strlen($html);
-
-            Log::debug("Croma page response", [
-                'status_code' => 200,
-                'content_length' => $contentLength
+            Log::info("Fetching Croma category with view-more expansion", [
+                'url'        => $url,
+                'max_clicks' => $maxClicks,
             ]);
 
-            if ($contentLength < 1000) {
-                Log::warning("Croma returned suspiciously small response", [
-                    'content_length' => $contentLength,
-                    'url' => $url
+            $process = new Process(
+                [$nodeBin, $scriptPath, $url, (string) $maxClicks],
+                base_path(),
+                null,
+                null,
+                240  // 4-minute timeout
+            );
+
+            $process->run();
+
+            if (!$process->isSuccessful()) {
+                Log::error("Croma view-more script failed", [
+                    'url'    => $url,
+                    'stderr' => $process->getErrorOutput(),
                 ]);
                 return null;
             }
 
-            // Check for redirects to homepage or error pages
-            if (strpos($html, '<title>Croma Electronics | Online Electronics Shopping') !== false &&
-                strpos($url, '/p/') !== false) {
-                Log::warning("Croma redirected product page to homepage", ['url' => $url]);
-                
-                // Save HTML for debugging
-                $debugFile = storage_path('logs/croma_redirect_debug_' . time() . '.html');
-                file_put_contents($debugFile, $html);
-                Log::debug("Saved HTML for debugging", ['file' => $debugFile]);
-                
-                return null;
-            }
+            $html = $process->getOutput();
 
-            // Check for other error pages
-            if (strpos($html, 'Access Denied') !== false ||
-                strpos($html, 'Page not found') !== false) {
-                Log::warning("Croma returned error page", ['url' => $url]);
-                
-                // Save HTML for debugging
-                $debugFile = storage_path('logs/croma_debug_' . time() . '.html');
-                file_put_contents($debugFile, $html);
-                Log::debug("Saved HTML for debugging", ['file' => $debugFile]);
-                
-                return null;
-            }
+            Log::info("Croma view-more fetch complete", [
+                'url'            => $url,
+                'content_length' => strlen($html),
+            ]);
 
-            return $html;
+            return strlen($html) > 1000 ? $html : null;
 
         } catch (\Exception $e) {
-            Log::error("Failed to fetch Croma page", [
-                'url' => $url,
-                'error' => $e->getMessage()
+            Log::error("Croma fetchAllProductsWithViewMore failed", [
+                'url'   => $url,
+                'error' => $e->getMessage(),
             ]);
             return null;
         }
+    }
+
+    public function __construct()
+    {
+        parent::__construct('croma');
     }
 
     /**
@@ -154,7 +152,6 @@ class CromaScraper extends BaseScraper
             }
 
             $productUrls = array_unique($productUrls);
-            $productUrls = array_slice($productUrls, 0, 50);
 
             Log::info("Extracted Croma product URLs", [
                 'count' => count($productUrls),
@@ -413,7 +410,6 @@ class CromaScraper extends BaseScraper
     {
         $descriptions = [];
 
-        // ✅ ONLY selectors that exist in provided HTML
         $descSelectors = [
             '.MuiAccordionDetails-root p',
             '.accordian-content p',
@@ -444,7 +440,7 @@ class CromaScraper extends BaseScraper
     {
         $prices = ['price' => null, 'sale_price' => null];
 
-        //  Sale price (current price)
+        // Sale price (current price)
         $saleSelector = '.cp-price.main-product-price .new-price .amount';
         $element = $crawler->filter($saleSelector)->first();
         if ($element->count() > 0) {
@@ -454,7 +450,7 @@ class CromaScraper extends BaseScraper
             }
         }
 
-        //  Original price (MRP / old price)
+        // Original price (MRP)
         $mrpSelector = '.cp-price.discount .old-price .amount';
         $element = $crawler->filter($mrpSelector)->first();
         if ($element->count() > 0) {
@@ -532,7 +528,6 @@ class CromaScraper extends BaseScraper
     {
         $data = ['rating' => null, 'review_count' => 0];
 
-        // ✅ Rating
         $crawler->filter('div.cp-rating')->each(function (Crawler $node) use (&$data) {
             // Try nested span first
             $nestedText = $node->filter('span:first-child')->count() ? trim($node->filter('span:first-child')->text()) : '';
@@ -548,7 +543,6 @@ class CromaScraper extends BaseScraper
             }
         });
 
-        // ✅ Review count
         $crawler->filter('div.cp-rating span.text a.pr-review')->each(function (Crawler $node) use (&$data) {
             $text = trim($node->text());
             if ($text && preg_match('/(\d+)\s+Reviews/', $text, $matches)) {
@@ -565,11 +559,10 @@ class CromaScraper extends BaseScraper
     {
         $brand = null;
 
-        // Loop through all spec info blocks
         $crawler->filter('.cp-specification-spec-info')->each(function (Crawler $node) use (&$brand) {
 
             if ($brand !== null) {
-                return; // Already found
+                return;
             }
 
             $labelNode = $node->filter('.cp-specification-spec-title h4')->first();
@@ -731,25 +724,6 @@ class CromaScraper extends BaseScraper
 
 
 
-    private function extractSpecifications(Crawler $crawler): ?array
-    {
-        $specs = [];
-
-        $crawler->filter('.product-specs tr, .specifications tr, .tech-specs tr')->each(function (Crawler $row) use (&$specs) {
-            $cells = $row->filter('td');
-            if ($cells->count() >= 2) {
-                $label = $this->cleanText($cells->eq(0)->text());
-                $value = $this->cleanText($cells->eq(1)->text());
-                
-                if ($label && $value) {
-                    $specs[$label] = $value;
-                }
-            }
-        });
-
-        return !empty($specs) ? $specs : null;
-    }
-
     private function extractImages(Crawler $crawler): ?array
     {
         $images = [];
@@ -847,7 +821,6 @@ class CromaScraper extends BaseScraper
     {
         $videoUrls = [];
 
-        // ✅ Product gallery video thumbnail (data-video-url)
         $crawler->filter('.cp-product-gallery img[data-video-url]')->each(function (Crawler $node) use (&$videoUrls) {
             $url = $node->attr('data-video-url');
             if ($url) {
@@ -855,7 +828,6 @@ class CromaScraper extends BaseScraper
             }
         });
 
-        // ✅ Video source inside product section
         $crawler->filter('.cp-product-gallery video source')->each(function (Crawler $node) use (&$videoUrls) {
             $src = $node->attr('src');
             if ($src) {
@@ -863,7 +835,6 @@ class CromaScraper extends BaseScraper
             }
         });
 
-        // ✅ Embedded videos (YouTube / Vimeo)
         $crawler->filter('iframe[src*="youtube"], iframe[src*="vimeo"]')->each(function (Crawler $node) use (&$videoUrls) {
             $src = $node->attr('src');
             if ($src) {

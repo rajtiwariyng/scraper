@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Services\DatabaseService;
-use App\Models\Laptop;
+use App\Models\Product;
 use App\Models\ScrapingLog;
 use Illuminate\Support\Facades\Log;
 
@@ -51,13 +51,8 @@ class CleanupCommand extends Command
         }
 
         try {
-            // Clean up old logs
             $this->cleanupLogs($logRetentionDays, $dryRun);
-            
-            // Clean up old inactive products
             $this->cleanupInactiveProducts($inactiveRetentionDays, $dryRun);
-            
-            // Show statistics
             $this->showStatistics();
 
             $this->info("Cleanup completed successfully!");
@@ -108,7 +103,7 @@ class CleanupCommand extends Command
     {
         $cutoffDate = now()->subDays($retentionDays);
         
-        $query = Laptop::where('is_active', false)
+        $query = Product::where('is_active', false)
                       ->where('updated_at', '<', $cutoffDate);
         
         $count = $query->count();
@@ -140,7 +135,6 @@ class CleanupCommand extends Command
         $this->info("Current Database Statistics:");
         $this->line("================================");
 
-        // Total products by platform
         $platforms = config('scraper.platforms', []);
         foreach ($platforms as $platformKey => $platformConfig) {
             $stats = $this->databaseService->getPlatformStats($platformKey);
@@ -155,10 +149,9 @@ class CleanupCommand extends Command
 
         $this->newLine();
 
-        // Overall statistics
-        $totalProducts = Laptop::count();
-        $activeProducts = Laptop::where('is_active', true)->count();
-        $inactiveProducts = Laptop::where('is_active', false)->count();
+        $totalProducts = Product::count();
+        $activeProducts = Product::where('is_active', true)->count();
+        $inactiveProducts = Product::where('is_active', false)->count();
         $totalLogs = ScrapingLog::count();
         $recentLogs = ScrapingLog::where('created_at', '>=', now()->subDays(7))->count();
 
@@ -169,9 +162,9 @@ class CleanupCommand extends Command
         $this->line("- Total Scraping Logs: {$totalLogs}");
         $this->line("- Recent Logs (7 days): {$recentLogs}");
 
-        // Database size estimation
-        $avgProductSize = 2; // KB per product (estimated)
-        $avgLogSize = 1; // KB per log (estimated)
+        // rough DB size estimate: 2 KB/product, 1 KB/log
+        $avgProductSize = 2;
+        $avgLogSize = 1;
         $estimatedSize = ($totalProducts * $avgProductSize) + ($totalLogs * $avgLogSize);
         
         $this->line("- Estimated DB Size: {$estimatedSize} KB");

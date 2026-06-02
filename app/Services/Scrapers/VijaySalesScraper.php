@@ -5,18 +5,19 @@ namespace App\Services\Scrapers;
 use App\Services\DataSanitizer;
 use Symfony\Component\DomCrawler\Crawler;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\Process\Process;
 
 class VijaySalesScraper extends BaseScraper
 {
     protected function setupPlatformConfig(): void
     {
         $this->platform = 'vijaysales';
-        $this->useJavaScript = false; // VijaySales works with regular HTTP requests
+        $this->useJavaScript = false; // Guzzle works; browser times out (site blocks headless Chrome)
         $this->paginationConfig = [
-            'type' => 'regular',
-            'max_pages' => 1,
-            'page_param' => 'p',
-            'has_next_selector' => '.pages .next',
+            'type'               => 'regular',
+            'max_pages'          => 50,
+            'page_param'         => 'p',
+            'delay_between_pages' => [2, 4],
         ];
     }
 
@@ -24,6 +25,72 @@ class VijaySalesScraper extends BaseScraper
     {
         parent::__construct('vijaysales');
     }
+
+    /**
+     * Use a dedicated Puppeteer script to click through all pagination pages
+     * in a single browser session, collecting every product URL. Guzzle alone
+     * cannot paginate because ?p=N is handled entirely client-side by the SPA.
+     */
+    protected function scrapeCategoryWithPagination(string $categoryUrl): void
+    {
+        $maxPages   = $this->paginationConfig['max_pages'] ?? 50;
+        $scriptPath = base_path('scripts/vijaysales-paginate.cjs');
+        $nodeBin    = config('scraper.node_binary', 'node');
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $currentPath = getenv('PATH') ?: '';
+            if (stripos($currentPath, 'Windows\\System32') === false) {
+                putenv('PATH=' . $currentPath . ';C:\\Windows\\System32;C:\\Windows\\SysWOW64');
+            }
+        }
+
+        Log::info("Fetching Vijay Sales product URLs via click-pagination script", [
+            'url'       => $categoryUrl,
+            'max_pages' => $maxPages,
+        ]);
+
+        $process = new Process(
+            [$nodeBin, $scriptPath, $categoryUrl, (string) $maxPages],
+            base_path(),
+            null,
+            null,
+            600 // 10-minute timeout for 26 pages
+        );
+
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            Log::error("Vijay Sales pagination script failed", [
+                'url'    => $categoryUrl,
+                'stderr' => $process->getErrorOutput(),
+            ]);
+            return;
+        }
+
+        $productUrls = json_decode($process->getOutput(), true);
+
+        if (!is_array($productUrls) || empty($productUrls)) {
+            Log::warning("Vijay Sales pagination script returned no URLs", ['url' => $categoryUrl]);
+            return;
+        }
+
+        // Relative → absolute
+        $productUrls = array_unique(array_map(function (string $u) {
+            return strpos($u, 'http') === 0 ? $u : 'https://www.vijaysales.com' . $u;
+        }, $productUrls));
+
+        Log::info("Vijay Sales pagination collected URLs", [
+            'count' => count($productUrls),
+            'url'   => $categoryUrl,
+        ]);
+
+        foreach ($productUrls as $productUrl) {
+            $this->scrapeProductPage($productUrl);
+            $this->randomDelay();
+        }
+    }
+
+
 
     /**
      * Extract product URLs from VijaySales category page
@@ -63,9 +130,7 @@ class VijaySalesScraper extends BaseScraper
                 }
             }
 
-            // Remove duplicates and limit results
             $productUrls = array_unique($productUrls);
-            $productUrls = array_slice($productUrls, 0, 50);
 
             Log::info("Extracted {count} product URLs from VijaySales category page", [
                 'count' => count($productUrls),
@@ -101,8 +166,6 @@ class VijaySalesScraper extends BaseScraper
         try {
             $data = [];
 
-            // Extract SKU from URL or page
-            //$data['sku'] = $this->extractSkuFromUrl($productUrl) ?: $this->extractSkuFromPage($crawler);
             $data['sku'] = $this->extractSkuFromUrl($productUrl);
             if (!$data['sku']) {
                 Log::warning("Could not extract SKU from VijaySales URL: {$productUrl}");
@@ -112,8 +175,6 @@ class VijaySalesScraper extends BaseScraper
             $data['product_url'] = $productUrl;
             $data['title'] = $this->extractProductName($crawler);
             $data['description'] = $this->extractDescription($crawler);
-            
-            // ✅ NEW: Extract all missing fields
             $data['brand'] = $this->extractBrand($crawler);
             $data['manufacturer'] = $this->extractManufacturer($crawler);
             $data['model_name'] = $this->extractModelName($crawler);
@@ -177,28 +238,6 @@ class VijaySalesScraper extends BaseScraper
         return null;
     }
 
-
-    private function extractSkuFromPage(Crawler $crawler): ?string
-    {
-        $selectors = [
-            '[data-product-sku]',
-            '.product-sku',
-            '.sku-number',
-            '.product-code'
-        ];
-
-        foreach ($selectors as $selector) {
-            $element = $crawler->filter($selector)->first();
-            if ($element->count() > 0) {
-                $sku = $element->attr('data-product-id') ?: $element->text();
-                if ($sku) {
-                    return $this->cleanText($sku);
-                }
-            }
-        }
-
-        return null;
-    }
 
     private function extractProductName(Crawler $crawler): ?string
     {
@@ -282,7 +321,8 @@ class VijaySalesScraper extends BaseScraper
 
     private function extractAvailability(Crawler $crawler): ?string
     {
-        // Get all instock elements
+        $availability = null;
+
         $crawler->filter('.instock__text')->each(function (Crawler $node) use (&$availability) {
 
             $classes = $node->attr('class') ?? '';
@@ -402,10 +442,6 @@ class VijaySalesScraper extends BaseScraper
 
         return !empty($variants) ? $variants : null;
     }
-
-    // ============================================
-    // ✅ NEW EXTRACTION METHODS
-    // ============================================
 
     private function extractBrand(Crawler $crawler): ?string
     {

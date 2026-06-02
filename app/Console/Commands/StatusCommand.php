@@ -63,13 +63,8 @@ class StatusCommand extends Command
      */
     protected function showOverallStatus(int $days, bool $detailed): void
     {
-        // System health check
         $this->showSystemHealth();
-        
-        // Platform performance
         $this->showPlatformPerformance($days);
-        
-        // Recent activity
         $this->showRecentActivity($days);
         
         if ($detailed) {
@@ -92,11 +87,9 @@ class StatusCommand extends Command
         $this->line("Platform Key: {$platform}");
         $this->newLine();
 
-        // Platform statistics
         $stats = $this->databaseService->getPlatformStats($platform);
         $this->showPlatformStats($stats);
 
-        // Recent logs
         $recentLogs = $this->databaseService->getRecentScrapingLogs($days, $platform);
         $this->showPlatformLogs($recentLogs, $days);
 
@@ -113,7 +106,6 @@ class StatusCommand extends Command
         $this->info("System Health:");
         $this->line("==============");
 
-        // Database connection
         try {
             DB::connection()->getPdo();
             $this->line("✓ Database: Connected");
@@ -121,7 +113,6 @@ class StatusCommand extends Command
             $this->line("✗ Database: Connection failed");
         }
 
-        // Recent scraping activity
         $recentActivity = ScrapingLog::where('created_at', '>=', now()->subHours(48))->count();
         if ($recentActivity > 0) {
             $this->line("✓ Recent Activity: {$recentActivity} scraping sessions in last 48 hours");
@@ -129,7 +120,6 @@ class StatusCommand extends Command
             $this->line("⚠ Recent Activity: No scraping activity in last 48 hours");
         }
 
-        // Data freshness
         $freshData = Product::where('scraped_date', '>=', now()->subDays(3))->count();
         $totalData = Product::count();
         $freshPercentage = $totalData > 0 ? round(($freshData / $totalData) * 100, 1) : 0;
@@ -217,7 +207,6 @@ class StatusCommand extends Command
         $this->info("Detailed Statistics:");
         $this->line("===================");
 
-        // Product statistics
         $totalProducts = Product::count();
         $activeProducts = Product::where('is_active', true)->count();
         $productsWithImages = Product::whereNotNull('image_urls')->count();
@@ -229,7 +218,6 @@ class StatusCommand extends Command
         $this->line("- Products with Images: {$productsWithImages}");
         $this->line("- Products with Ratings: {$productsWithRatings}");
 
-        // Price statistics
         $avgPrice = Product::where('is_active', true)->avg('price');
         $minPrice = Product::where('is_active', true)->min('price');
         $maxPrice = Product::where('is_active', true)->max('price');
@@ -240,7 +228,6 @@ class StatusCommand extends Command
         $this->line("- Minimum Price: ₹" . number_format($minPrice ?? 0, 2));
         $this->line("- Maximum Price: ₹" . number_format($maxPrice ?? 0, 2));
 
-        // Brand distribution
         $topBrands = Product::where('is_active', true)
                           ->whereNotNull('brand')
                           ->groupBy('brand')

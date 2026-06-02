@@ -35,12 +35,37 @@ abstract class BaseScraper
     ];
 
     protected float $startTime;
-    protected int $maxExecutionTime = 86400; // 1 hour default limit
+    protected int $maxExecutionTime = 86400; // 24 hours; overridden from config in __construct
+    protected int $maxProducts = 0; // 0 = unlimited
     protected ?\App\Services\ProxyRotator $proxyRotator = null;
+
+    protected function setupPlatformLogger(): void
+    {
+        $channel = 'scraper_' . $this->platform;
+        $logDir  = storage_path('logs/scrapers');
+
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+
+        // Register a daily-rotating channel for this platform
+        config([
+            "logging.channels.{$channel}" => [
+                'driver' => 'daily',
+                'path'   => $logDir . DIRECTORY_SEPARATOR . $this->platform . '.log',
+                'level'  => 'debug',
+                'days'   => 14,
+            ],
+        ]);
+
+        // Make it the default so every Log::*() call in subclasses and services
+        // (BrowserService, etc.) goes to this platform's file automatically
+        app('log')->setDefaultDriver($channel);
+    }
 
     protected function log(): \Psr\Log\LoggerInterface
     {
-        return Log::channel('scraper');
+        return Log::channel('scraper_' . $this->platform);
     }
 
     /**
@@ -57,6 +82,8 @@ abstract class BaseScraper
         $this->platform = $platform;
         $this->startTime = microtime(true);
         $this->maxExecutionTime = config('scraper.schedule.max_execution_time', 86400); // Use config value
+
+        $this->setupPlatformLogger();
 
         // Set PHP execution time limit
         set_time_limit($this->maxExecutionTime + 300); // Add 5 minutes buffer
@@ -117,7 +144,6 @@ abstract class BaseScraper
                 'Cache-Control' => 'max-age=0',
                 'Upgrade-Insecure-Requests' => '1',
                 'Connection' => 'keep-alive',
-                'Upgrade-Insecure-Requests' => '1',
             ],
             'verify' => false,
             'allow_redirects' => true,
@@ -143,7 +169,6 @@ abstract class BaseScraper
                 }
             }
 
-            //$this->deactivateOldProducts();
             $this->scrapingLog->complete($this->stats);
 
             $this->log()->info("Completed scraping for platform: {$this->platform}", $this->stats);
@@ -167,6 +192,11 @@ abstract class BaseScraper
     public function setScraperId(string $id): void
     {
         $this->scraperId = $id;
+    }
+
+    public function setMaxProducts(int $limit): void
+    {
+        $this->maxProducts = $limit;
     }
 
     public function getScraperId(): string
@@ -193,6 +223,15 @@ abstract class BaseScraper
         $failedPages = [];
 
         while ($currentPage <= $maxPages && $noProductsCount < $maxNoProductsPages && $consecutiveErrors < $maxConsecutiveErrors) {
+            // Check product limit
+            if ($this->maxProducts > 0 && $this->stats['products_found'] >= $this->maxProducts) {
+                $this->log()->info("Product limit reached, stopping pagination", [
+                    'limit' => $this->maxProducts,
+                    'found' => $this->stats['products_found'],
+                ]);
+                break;
+            }
+
             // Check execution time limit
             if ($this->isExecutionTimeLimitReached()) {
                 $this->log()->warning("Stopping pagination due to execution time limit");
@@ -345,6 +384,9 @@ abstract class BaseScraper
             ]);
 
             foreach ($productUrls as $productUrl) {
+                if ($this->maxProducts > 0 && $this->stats['products_found'] >= $this->maxProducts) {
+                    break;
+                }
                 $this->scrapeProductPage($productUrl);
                 $this->randomDelay();
             }
@@ -426,13 +468,17 @@ abstract class BaseScraper
      */
     protected function buildPageUrl(string $baseUrl, int $page): string
     {
+        $pageParam = $this->paginationConfig['page_param'] ?? 'page';
+
+        // Strip any pre-existing page param to avoid ?page=26&page=2
+        $baseUrl = preg_replace('/([?&])' . preg_quote($pageParam, '/') . '=\d+/', '$1', $baseUrl);
+        $baseUrl = preg_replace('/[?&]$/', '', $baseUrl);
+
         if ($page === 1) {
             return $baseUrl;
         }
 
-        $pageParam = $this->paginationConfig['page_param'] ?? 'page';
         $separator = strpos($baseUrl, '?') !== false ? '&' : '?';
-
         return $baseUrl . $separator . $pageParam . '=' . $page;
     }
 
@@ -556,28 +602,6 @@ abstract class BaseScraper
             Product::create($productData);
             $this->stats['products_added']++;
             $this->log()->debug("Added new product: {sku}", ['sku' => $productData['sku']]);
-        }
-    }
-
-    /**
-     * Deactivate products that weren't found in current scraping session
-     */
-    protected function deactivateOldProducts(): void
-    {
-        $cutoffTime = $this->scrapingLog->started_at->subHours(1);
-
-        $deactivatedCount = Product::where('platform', $this->platform)
-            ->where('is_active', true)
-            ->where('scraped_date', '<', $cutoffTime)
-            ->update(['is_active' => false]);
-
-        $this->stats['products_deactivated'] = $deactivatedCount;
-
-        if ($deactivatedCount > 0) {
-            $this->log()->info("Deactivated {count} old products", [
-                'count' => $deactivatedCount,
-                'platform' => $this->platform
-            ]);
         }
     }
 
